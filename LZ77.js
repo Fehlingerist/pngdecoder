@@ -1,3 +1,6 @@
+//RFC 1951
+const EOB = 0b11111111;//End of (deflate) block
+
 const ZLIB_FLAG_BITMASKS = Object.freeze({
  CompressionMethod: 0b00001111,
  CompressionInfo: 0b11110000,
@@ -6,17 +9,6 @@ const ZLIB_FLAG_BITMASKS = Object.freeze({
  FDICT: 0b00010000,
  FLEVEL: 0b11000000
 });
-
-const BIT_FLAGS = new Uint8Array([
-  0b1,
-  0b10,
-  0b100,
-  0b1000,
-  0b10000,
-  0b100000,
-  0b1000000,
-  0b10000000
-]);
 
 NULL_BASIC_CHUNK = _createBasicChunk();
 NULL_READING_CONTEXT = _createReadingContext();
@@ -53,15 +45,12 @@ function readBit(_BitReadingContext)
  let BitReadingContext = NULL_BIT_READING_CONTEXT;
  BitReadingContext = _BitReadingContext;
 
- let Flag = BIT_FLAGS[BitReadingContext.CurrentBit];
- let BitValue = (BitReadingContext.CurrentByteValue & Flag) >> BitReadingContext.CurrentBit;
-
+ let BitValue = (BitReadingContext.CurrentByteValue >> BitReadingContext.CurrentBit) & 1;
  BitReadingContext.CurrentBit++;
-
  if (BitReadingContext.CurrentBit == 8)
  {
   BitReadingContext.CurrentBit = 0;
-  BitReadingContext.CurrentByteValue = readByte(BitReadingContext.ByteReadingContext);
+  BitReadingContext.CurrentByteValue = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
  };
 
  return BitValue;
@@ -99,7 +88,7 @@ function readBitsMSB(_BitReadingContext,BitCount=1)
 
 function inflateLZ77(_ReadingContext)
 {
- let CodeHashmap = {};
+ let CodeTree = [];
 
  let ReadingContext = NULL_READING_CONTEXT;
  ReadingContext = _ReadingContext;  
@@ -116,10 +105,56 @@ function inflateLZ77(_ReadingContext)
  let FDICT  = (FLG & ZLIB_FLAG_BITMASKS.FDICT) >> 5;
  let FLEVEL = (FLG & ZLIB_FLAG_BITMASKS.FLEVEL) >> 6;
 
+ let DICTID = 0;
+
+ if (FDICT == 1) {
+   DICTID = NCDSReadNumber(NCDS_ZLIB_ReadingContext);
+ };
+
  let IsAMultipleOf31 = (CMF * 256 + FLG) % 31 == 0;
+
+ if (!IsAMultipleOf31) {
+    console.assert(false,
+        "ZLIB data invalid, CMF*256 + FLG bytes must be a multiple of 31"
+    );
+    return null;
+ };
 
  let ADLER32_SUM1 = 1;
  let ADLER32_SUM2 = 0;
+
+ let Iteration = 0;
+ let ByteIteration = 0b00000000;
+ let BitsInARow = 0;
+
+ let BitReadingContext = createBitReadingContext(NCDS_ZLIB_ReadingContext);
+
+ let IsBlockFinal = readBit(BitReadingContext);
+ let BlockType = readBitsLSB(BitReadingContext,2);
+
+ let Bits = "";
+
+ while (true) {
+  let Bit = readBit(BitReadingContext);
+  
+  if (Bit === 1)
+  {
+   BitsInARow += 1;
+  } else{
+   BitsInARow = 0;
+  };
+
+  ByteIteration << 1;
+  ByteIteration |= 1;
+  ByteIteration & EOB;
+  
+  Bits += Bit;
+
+  if (BitsInARow == 8){
+   alert("End of block");
+   break;
+  };
+ };
 
  /* 
     Adler-32 is composed of two sums accumulated per byte: s1 is
@@ -128,20 +163,13 @@ function inflateLZ77(_ReadingContext)
     Adler-32 checksum is stored as s2*65536 + s1 in most-
     significant-byte first (network) order. 
  */
- ADLER32_SUM2 %= 65536;
+ ADLER32_SUM2 %= 65521;
  let ADLER32ChS = ADLER32_SUM2*65536 + ADLER32_SUM1;
- 
-
- if (!IsAMultipleOf31) {
-    console.assert(false,
-        "ZLIB data invalid, CMF*256 + FLG bytes must be a multiple of 31"
-       );
-    return null;
- };
 };
 
 function deflateLZ77(_Data)
 {
  let Data = NULL_ARRAY;
  Data = _Data;
+
 };

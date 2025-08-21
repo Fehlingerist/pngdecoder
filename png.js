@@ -172,6 +172,39 @@ function NCDSReadByte(_MultiChunkReadingContext) //Non Continous Data Stream Rea
   return readByte(MultiChunkReaderContext.ReadingContext);
 };
 
+function NCDSReadNumber(_MultiChunkReadingContext,SizeOf=4,IsSigned=false) //Non Continous Data Stream Read byte
+{ 
+ let MultiChunkReadingContext = NULL_NCDS_READING_CONTEXT;
+ MultiChunkReadingContext = _MultiChunkReadingContext;
+
+ let Number = 0;
+ let FirstByte = NCDSReadByte(MultiChunkReadingContext);
+
+ let IsNegative = (FirstByte >> 7) == 1 && IsSigned;
+ let NumberBits = SizeOf * 8;
+
+ if (IsNegative) {
+  NumberBits--;
+  FirstByte = FirstByte << 1;
+  FirstByte = FirstByte & BYTE_MAX;
+  FirstByte = FirstByte >> 1;
+ };
+
+ Number += FirstByte * (2 ** (NumberBits - 8));
+
+ for (let ByteIndex = 1;ByteIndex < SizeOf;ByteIndex++)
+ {
+  let Byte = NCDSReadByte(MultiChunkReadingContext);
+  Number += Byte * (2 ** (NumberBits - (ByteIndex+1) * 8));
+ };
+
+ if (IsNegative) {
+    Number = -Number;
+ };
+
+ return Number;
+};
+
 function chunkHasBeenRead(_ReadingContext,_BasicChunk){
  let ReadingContext = NULL_READING_CONTEXT;
  let BasicChunk = NULL_BASIC_CHUNK;
@@ -186,6 +219,17 @@ function setContextOfReadingContextFromChunk(_ReadingContext,_BasicChunk)
  let BasicChunk = NULL_BASIC_CHUNK;
  ReadingContext = _ReadingContext;
  BasicChunk = _BasicChunk;
+
+ if (!ReadingContext)
+ {
+  console.assert(false,"Reading context doesn't exist");
+  return null;
+ }
+ if (!BasicChunk)
+ {
+  console.assert(false,"Chunk doesn't exist");
+  return null;
+ }
 
  ReadingContext.Start = BasicChunk.OffsetInData;
  ReadingContext.LastByte = BasicChunk.OffsetInData + BasicChunk.Length;
@@ -331,12 +375,12 @@ function readNumber(_ReadingContext,SizeOf=4,IsSigned=false) {
   FirstByte = FirstByte >> 1;
  };
 
- Number += (FirstByte << ((SizeOf-1) * 8));
+ Number += FirstByte * (2 ** NumberBits);
 
  for (let ByteIndex = 1;ByteIndex < SizeOf;ByteIndex++)
  {
   let Byte = readByte(ReadingContext);
-  Number += (Byte << ((SizeOf-ByteIndex-1) * 8));
+  Number += Byte * (2 ** (NumberBits - (ByteIndex+1) * 8));
  };
 
  if (IsNegative) {
@@ -523,7 +567,7 @@ function getPLTEChunkData(_ReadingContext)
  setContextOfReadingContextFromChunk(PLTEReadingContext,PLTEChunk);
 
  let PaletteEntries = [];
- for (let Index = 0;Index < PLTEChunk.Length;Index++)
+ for (let Index = 0;Index < ActiveEntires;Index++)
  {
   PaletteEntries[Index] = _createColor(
    readByte(PLTEReadingContext)
@@ -618,12 +662,14 @@ async function decode()
  };
 
  //bookmark
- //reverse the effects of Adam7 algorithm
- //adam7Rev(Data);
+ //PLTE logic should be before adam7, because data is stored at interlacing stage...
  if ((IHDRChunk.ColorType & COLOR_TYPES.PALETTE) == COLOR_TYPES.PALETTE)
  { 
   let PLTEChunk = getPLTEChunkData(ReadingContext,IHDRChunk.ColorType);
  }; 
+
+ //reverse the effects of Adam7 algorithm
+ //adam7Rev(Data);
 
  //bookmark ready to interpret
 
