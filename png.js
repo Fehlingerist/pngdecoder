@@ -13,11 +13,11 @@ const ENUM_LOGICAL_BIT_OFFSETS = Object.freeze({
     LOWER_CASE_BIT: 32,
 });
 const BIT_DEPTHS = Object.freeze({
- BIT1: 1,
- BIT2: 2,
- BIT4: 4,
- BIT8: 8,
- BIT16: 16,
+ BIT1: 0b1,
+ BIT2: 0b10,
+ BIT4: 0b100,
+ BIT8: 0b1000,
+ BIT16:0b10000,
 });
 const FILTER_METHODS = Object.freeze({
  None: 0,
@@ -42,8 +42,9 @@ let BIT32_MAX = Math.pow(2,32) - 1;
 let TARGET_IMAGE_RESOURCE = "";
 let TARGET_IMAGE_RESOURCE_TYPE = ENUM_TARGET_TYPES.URL;
 
-const NULL_READING_CONTEXT = _createReadingContext();
-const NULL_BASIC_CHUNK = _createBasicChunk();
+let NULL_READING_CONTEXT = _createReadingContext();
+let NULL_BASIC_CHUNK = _createBasicChunk();
+let NULL_NCDS_READING_CONTEXT = _createMultiChunkReadingContext();
 
 function isURLValid(url) {
   try {
@@ -67,20 +68,31 @@ function _createColor(R=0,G=0,B=0)
  };
 };
 
+function _createMultiChunkReadingContext()
+{
+ return {
+  Chunks: {},
+  ReadingContext: NULL_READING_CONTEXT,
+  CurrentChunkIndex: 0,
+  CurrentGlobalChunkIndex: 0,
+  Length: 0, //sum of all lengths of Chunks
+  ChunkType: ""
+ };
+};
+
 function _createReadingContext()
 {
- let ReadingContex = {
+ let ReadingContext = {
   Source: new Uint8Array(),
   Length: 0,
   
   Start: 0,//this is used for elements of the Source data block in the context of png file format
   End: 0,
   
-  ReadBytes: 0,
   CurrentReadByte: 0,
   Chunks: {},
  };   
- return ReadingContex;
+ return ReadingContext;
 };
 
 function _createBasicChunk()
@@ -92,10 +104,94 @@ function _createBasicChunk()
     IsPublic: false,
     ReservedBit: false,
     SafeToCopy: false,
+
+    OffsetInData: 0,
     
     Length: 0,
   };
 }
+
+function createMultiChunkReadingContext(_ReadingContext,ChunkType)
+{
+  let ReadingContext = NULL_READING_CONTEXT;
+  ReadingContext = _ReadingContext;
+
+  let MultiChunkReaderContext = _createMultiChunkReadingContext();
+  let Chunks = getChunksByType(ReadingContext,ChunkType);
+  if (!Chunks) 
+  {
+   console.assert("There's no such a chunk type within the reading context");
+   return NULL_NCDS_READING_CONTEXT;
+  };
+
+  for (let Index = 0;Index < Chunks.length;Index++)
+  {
+   let Chunk = NULL_BASIC_CHUNK;
+   Chunk = Chunks[Index];
+   MultiChunkReaderContext.Length += Chunk.Length;
+  }
+
+  MultiChunkReaderContext.Chunks = Chunks;
+  MultiChunkReaderContext.ReadingContext = ReadingContext;
+
+  setContextOfReadingContextFromChunk(
+    ReadingContext,
+    Chunks[MultiChunkReaderContext.CurrentChunkIndex]
+  );
+  //it's safe to read first chunk at this stage
+  return MultiChunkReaderContext;
+};
+
+function NCDSReadByte(_MultiChunkReadingContext) //Non Continous Data Stream Read byte
+{
+  let MultiChunkReaderContext = NULL_NCDS_READING_CONTEXT;
+  MultiChunkReaderContext = _MultiChunkReadingContext;
+
+  if (MultiChunkReaderContext.Length == MultiChunkReaderContext.CurrentGlobalChunkIndex)
+  {
+   console.assert("There is no more memory to read within the context.");
+   return null;
+  };
+  
+  let InnerIndex = MultiChunkReaderContext.ReadingContext.CurrentReadByte;
+  let LastByte = MultiChunkReaderContext.ReadingContext.LastByte;
+
+  if (InnerIndex == LastByte+1)
+  {
+   MultiChunkReaderContext.CurrentChunkIndex++;
+   setContextOfReadingContextFromChunk(
+    MultiChunkReaderContext.ReadingContext,
+    MultiChunkReaderContext.Chunks[MultiChunkReaderContext.CurrentChunkIndex]
+   );
+  } else if (InnerIndex >= LastByte+1)
+  {
+   console.assert(false,
+    "Bug occured"
+   );
+  };
+  return readByte(MultiChunkReaderContext.ReadingContext);
+};
+
+function chunkHasBeenRead(_ReadingContext,_BasicChunk){
+ let ReadingContext = NULL_READING_CONTEXT;
+ let BasicChunk = NULL_BASIC_CHUNK;
+ ReadingContext = _ReadingContext;
+ BasicChunk = _BasicChunk;
+ ReadingContext.CurrentReadByte += BasicChunk.Length;
+}
+
+function setContextOfReadingContextFromChunk(_ReadingContext,_BasicChunk)
+{
+ let ReadingContext = NULL_READING_CONTEXT;
+ let BasicChunk = NULL_BASIC_CHUNK;
+ ReadingContext = _ReadingContext;
+ BasicChunk = _BasicChunk;
+
+ ReadingContext.Start = BasicChunk.OffsetInData;
+ ReadingContext.LastByte = BasicChunk.OffsetInData + BasicChunk.Length;
+
+ ReadingContext.CurrentReadByte = 0;
+};
 
 function createReadingContext(Data)
 {
@@ -111,7 +207,7 @@ function createReadingContext(Data)
 function createBasicChunk()
 {
   return _createBasicChunk();
-}
+};
 
 function getChunkByType(_ReadingContext,ChunkType){
  let ReadingContext = NULL_READING_CONTEXT ;
@@ -155,15 +251,22 @@ async function requestImageData(ImageURL)
 
 function readByte(_ReadingContext)
 {
- let ReadingContext = NULL_READING_CONTEXT ;
- if (_ReadingContext) {
-   ReadingContext = _ReadingContext;
- };
- return ReadingContext.Source[ReadingContext.CurrentReadByte++];
+ let ReadingContext = NULL_READING_CONTEXT;
+ ReadingContext = _ReadingContext;
+ return ReadingContext.Source[ReadingContext.Start + ReadingContext.CurrentReadByte++];
+};
+
+function readCurrentByte(_ReadingContext)
+{
+ let ReadingContext = NULL_READING_CONTEXT;
+ ReadingContext = _ReadingContext;
+ 
+ return ReadingContext.Source[ReadingContext.Start + ReadingContext.CurrentReadByte];
 };
 
 function readBufferData(_ReadingContext,BufferLength)
 {
+ warn("Function is no longer needed - stop the use of it");
  let ReadingContext = NULL_READING_CONTEXT ;
  if (_ReadingContext) {
    ReadingContext = _ReadingContext;
@@ -176,12 +279,17 @@ function readBufferData(_ReadingContext,BufferLength)
  return BufferData;
 }
 
+function assignChunkBoundaries(_BasicChunk,Offset)
+{
+ let BasicChunk = NULL_BASIC_CHUNK;
+ BasicChunk = _BasicChunk;
+ BasicChunk.OffsetInData = Offset;
+}
+
 function readCharString(_ReadingContext,StringLength)
 {
- let ReadingContext = NULL_READING_CONTEXT ;
- if (_ReadingContext) {
-   ReadingContext = _ReadingContext;
- };
+ let ReadingContext = NULL_READING_CONTEXT;
+ ReadingContext = _ReadingContext;
  let CharString = "";
  for (let Index = 0;Index < StringLength;Index++)
  {
@@ -260,8 +368,11 @@ function readChunk(_ReadingContext)
  let Length = readNumber(ReadingContext);
  let ChunkType = readCharString(ReadingContext,4);
 
+ let Offset = ReadingContext.CurrentReadByte;
+ assignChunkBoundaries(Chunk,Offset);
+
  Chunk.ChunkType = ChunkType;
- Chunk.Data = readBufferData(ReadingContext,Length);
+ Chunk.Data = ReadingContext.Source;
 
  Chunk.IsCriticial = !isLowerCase(ChunkType[0]);
  Chunk.IsPublic = !isLowerCase(ChunkType[1]); 
@@ -269,8 +380,9 @@ function readChunk(_ReadingContext)
  Chunk.SafeToCopy = isLowerCase(ChunkType[3]);
 
  Chunk.Length = Length;
- 
- let CalcualtedCRC = getCRCOfBuffer();//bookmark to be calculated
+
+ let CalcualtedCRC = getCRCOfBuffer(ReadingContext,Chunk);//bookmark to be calculated
+ chunkHasBeenRead(ReadingContext,Chunk);//technically no and it's CRC's job
  let CRC = readNumber(ReadingContext);
  CalcualtedCRC = CRC;//bookmark should be removed after fixes
 
@@ -361,6 +473,7 @@ function getIHDRChunkData(_ReadingContext)
  };
 
  let IHDRDataReadingContext = createReadingContext(IHDRChunk.Data);
+ setContextOfReadingContextFromChunk(IHDRDataReadingContext,IHDRChunk);
 
  Width = readNumber(IHDRDataReadingContext);
  Height = readNumber(IHDRDataReadingContext);
@@ -407,70 +520,43 @@ function getPLTEChunkData(_ReadingContext)
 
  let ActiveEntires = PLTEChunk.Length / 3;
  let PLTEReadingContext = createReadingContext(PLTEChunk.Data);
+ setContextOfReadingContextFromChunk(PLTEReadingContext,PLTEChunk);
 
  let PaletteEntries = [];
-
- for (let _ = 0;_ < ActiveEntires;_++)
+ for (let Index = 0;Index < PLTEChunk.Length;Index++)
  {
-  let R = readByte(PLTEReadingContext);
-  let G = readByte(PLTEReadingContext);
-  let B = readByte(PLTEReadingContext);
-  PaletteEntries.push(_createColor(R,G,B));
+  PaletteEntries[Index] = _createColor(
+   readByte(PLTEReadingContext)
+  ,readByte(PLTEReadingContext)
+  ,readByte(PLTEReadingContext)
+  );
  };
+
  return {
   PaletteEntries: PaletteEntries,
  };
 };
 
-function inflate(_ReadingContext,CompressedData,UsedCompressionMethod)
+function decompress(_ReadingContext,CompressionMethod)
 {
  let ReadingContext = NULL_READING_CONTEXT;
  ReadingContext = _ReadingContext;  
- 
- let CompressedDataReadingContext = createReadingContext(CompressedData);
 
- let CompressionMethod = readByte(CompressedDataReadingContext);
- let AdditionalFlags = readByte(CompressedDataReadingContext);
+ let DecompressedData = null;
 
- let DecompressedData = inflateLZ77(CompressedData);
+ if (CompressionMethod == COMPRESSION_METHODS.LZ77)//only 1 compression/decompression method is supported
+ {
+  DecompressedData = inflateLZ77(ReadingContext);
+ } else{
+  console.assert(false,"Undefined compression algorithm");  
+  return null;
+ };
  if (!DecompressedData) {
   console.assert(false,
     "Something went wrong");
   return null;
  }
  return DecompressedData;
-};
-
-function mergeIDATChunks(_ReadingContext)
-{
- let ReadingContext = NULL_READING_CONTEXT ;
- ReadingContext = _ReadingContext;   
- let IDATChunks = getChunksByType(ReadingContext,"IDAT");
- //bookmark unfinished
- let TotalLength = 0;
- for (let Index = 0;Index < IDATChunks.length;Index++)
- {
-  let IDATChunk = NULL_BASIC_CHUNK;
-  IDATChunk = IDATChunks[Index];
-  TotalLength += IDATChunk.Length;
-  let LocalReadingContext = createReadingContext(IDATChunk.Data);
-  console.log(readByte(LocalReadingContext));
-  console.log(readByte(LocalReadingContext));
- };
-
- let DataBuffer = new Uint8Array(TotalLength);
- let TotalIndex = 0;
- for (let Index = 0;Index < IDATChunks.length;Index++)
- {
-  let IDATChunk = NULL_BASIC_CHUNK;
-  IDATChunk = IDATChunks[Index];
-  for (let InnerIndex = 0;InnerIndex < IDATChunk.Length;InnerIndex++)
-  {
-   DataBuffer[TotalIndex] = IDATChunk.Data[InnerIndex];
-   TotalIndex++;
-  };
- };
- return DataBuffer;
 };
 
 function reverseFilter(FilteredData,FilterMethod)
@@ -495,6 +581,7 @@ async function decode()
  }
  let ImageData = await requestImageData(ImageURL);
  let ReadingContext = createReadingContext(ImageData);
+ 
  if (!checkSignature(ReadingContext)) {
    console.assert(false,
     "The file doesn't have the PNG signature"
@@ -505,11 +592,6 @@ async function decode()
  readChunks(ReadingContext);
 
  let IHDRChunk = getIHDRChunkData(ReadingContext);
- if (IHDRChunk.CompressionMethod != COMPRESSION_METHODS.LZ77)//only 1 compression/decompression method is supported
- {
-  console.assert(false,"Undefined compression algorithm");
-  return -1;
- };
 
  let IsFilterMethodValid = IHDRChunk.FilterMethod >= 0 && IHDRChunk.FilterMethod <= 4;
  if (!IsFilterMethodValid) {
@@ -518,11 +600,15 @@ async function decode()
   return -1;
  };
 
- let Data = mergeIDATChunks(ReadingContext);
-
+ let Data = new Uint8Array(0);
  //inflating algorithm should then return the result in a single ByteArray
  //bookmark inflate
- Data = inflate(ReadingContext,Data);
+ Data = decompress(ReadingContext,IHDRChunk.CompressionMethod);
+
+ if (!Data) {
+  console.assert(false,"Data couldn't be decompressed successfully");
+  return -1;
+ };
 
  let IsFiltered = IHDRChunk.FilterMethod != FILTER_METHODS.None;
 
@@ -531,9 +617,12 @@ async function decode()
   Data = reverseFilter(Data,IHDRChunk.FilterMethod);
  };
 
+ //bookmark
+ //reverse the effects of Adam7 algorithm
+ //adam7Rev(Data);
  if ((IHDRChunk.ColorType & COLOR_TYPES.PALETTE) == COLOR_TYPES.PALETTE)
  { 
-  let PLTEChunk = getPLTEChunkData(ReadingContext);
+  let PLTEChunk = getPLTEChunkData(ReadingContext,IHDRChunk.ColorType);
  }; 
 
  //bookmark ready to interpret
