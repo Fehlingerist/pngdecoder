@@ -1,31 +1,110 @@
 //RFC 1951
-const EOB = 0b11111111;//End of (deflate) block
 
-const ZLIB_FLAG_BITMASKS = Object.freeze({
- CompressionMethod: 0b00001111,
- CompressionInfo: 0b11110000,
-
- FCheck: 0b00001111,
- FDICT: 0b00010000,
- FLEVEL: 0b11000000
+function LZ77()
+{
+ const EOB = 256;//End of (deflate) block
+ 
+ const ZLIB_FLAG_BITMASKS = Object.freeze({
+  CompressionMethod: 0b00001111,
+  CompressionInfo: 0b11110000,
+ 
+  FCheck: 0b00001111,
+  FDICT: 0b00010000,
+  FLEVEL: 0b11000000
+ });
+ 
+ const DEFLATE_BLOCK_TYPES = Object.freeze({
+  NO_COMPRESSION: 0b00,
+  FIXED_HUFFMAN_CODES: 0b01,
+  DYNAMIC_HUFFMAN_CODES: 0b10,
+  RESERVED: 0b11
+ });
+ 
+const RETURN_VALUES = Object.freeze({
+ ERROR: -1,
+ BLOCK_CONTINUE: 0,
+ BLOCK_LAST: 1
 });
 
-NULL_BASIC_CHUNK = _createBasicChunk();
-NULL_READING_CONTEXT = _createReadingContext();
-NULL_NCDS_READING_CONTEXT = _createMultiChunkReadingContext();
-
-let NULL_ARRAY = new Uint8Array();
-let NULL_BIT_READING_CONTEXT = _createBitReadingContext();
-
-function _createBitReadingContext(){
+ const STDPNG = PNG();
+ 
+ let NULL_VECTOR8 = new Vector8(0);
+ 
+ let NULL_BASIC_CHUNK = STDPNG._createBasicChunk();
+ let NULL_READING_CONTEXT = STDPNG._createReadingContext();
+ let NULL_NCDS_READING_CONTEXT = STDPNG._createMultiChunkReadingContext();
+ 
+ let NULL_BIT_READING_CONTEXT = _createBitReadingContext();
+ let NULL_DELFATE_BLOCK = _createDeflateBlockContext();
+ let NULL_DECOMPRESSION_CONTEXT = _createDecompressionContext();
+ 
+ let NCDSReadByte = STDPNG.NCDSReadByte;
+ let NCDSReadCurrentByte = STDPNG.NCDSReadCurrentByte;
+ 
+ let createMultiChunkReadingContext = STDPNG.createMultiChunkReadingContext;
+ 
+ 
+ function _createDeflateBlockContext()
+{
+ return {
+  OutputData: new Vector8(0),
+  BlockType: DEFLATE_BLOCK_TYPES.RESERVED,
+  IsFinalBlock: 0
+ };
+ };
+ 
+ function _createDecompressionContext()
+ {
+   return {
+    BitReadingContext: NULL_BIT_READING_CONTEXT,
+    DataOutput: NULL_VECTOR8,
+ 
+    ADLER32ChS: 0,
+    ADLER32: 0,
+    ADLER32_SUM1: 0,
+    ADLER32_SUM2: 0
+   }; 
+ };
+ 
+ function createDecompressionContext(_BitReadingContext)
+ {
+  let BitReadingContext = NULL_BIT_READING_CONTEXT;
+  BitReadingContext = _BitReadingContext;
+ 
+  if (!BitReadingContext)
+  {
+   return NULL_DECOMPRESSION_CONTEXT;
+  };
+ 
+  let InflateDecompressionContext = _createDecompressionContext();
+  InflateDecompressionContext.ADLER32_SUM1 = 1;
+  InflateDecompressionContext.ADLER32_SUM2 = 0;
+   /* 
+     Adler-32 is composed of two sums accumulated per byte: s1 is
+     the sum of all bytes, s2 is the sum of all s1 values. Both sums
+     are done modulo 65521. s1 is initialized to 1, s2 to zero.  The
+     Adler-32 checksum is stored as s2*65536 + s1 in most-
+     significant-byte first (network) order. 
+  */
+ 
+  return InflateDecompressionContext;
+ };
+ 
+ function _createBitReadingContext(){
  return {
   NCDS_ReadingContext : NULL_NCDS_READING_CONTEXT,
   CurrentBit: 0,
   CurrentByteValue: 0,
+  CurrentByteIndex: 0
  };
-};
+ };
+ 
+ function setDeflateBlockContextData(_DeflateBlockContext, IsFinal, BlockType)
+{
 
-function createBitReadingContext(_NCDS_ReadingContext){
+ };
+ 
+ function createBitReadingContext(_NCDS_ReadingContext){
  let NCDS_ReadingContext = NULL_NCDS_READING_CONTEXT;
  NCDS_ReadingContext = _NCDS_ReadingContext;
  let BitReadingContext = _createBitReadingContext();
@@ -37,139 +116,227 @@ function createBitReadingContext(_NCDS_ReadingContext){
  //CurrentBit >= 0 & CurrentBit <= 7
 
  return BitReadingContext;
-};
-
-
-function readBit(_BitReadingContext)
-{
- let BitReadingContext = NULL_BIT_READING_CONTEXT;
- BitReadingContext = _BitReadingContext;
-
- let BitValue = (BitReadingContext.CurrentByteValue >> BitReadingContext.CurrentBit) & 1;
- BitReadingContext.CurrentBit++;
- if (BitReadingContext.CurrentBit == 8)
- {
-  BitReadingContext.CurrentBit = 0;
-  BitReadingContext.CurrentByteValue = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
  };
-
- return BitValue;
-};
-
-function readBitsLSB(_BitReadingContext,BitCount=1)
-{
- let BitReadingContext = NULL_BIT_READING_CONTEXT;
- BitReadingContext = _BitReadingContext;
- let Value = 0;
-
- for (let Index = 0;Index < BitCount;Index++)
- {
-  let Bit = readBit(BitReadingContext);//From LSB to the MSB
-  Value += Bit * (2**Index);
- };
-
- return Value;
-};
-
-function readBitsMSB(_BitReadingContext,BitCount=1)
-{
- let BitReadingContext = NULL_BIT_READING_CONTEXT;
- BitReadingContext = _BitReadingContext;
- let Value = 0;
-
- for (let Index = 0;Index < BitCount;Index++)
- {
-  let Bit = readBit(BitReadingContext);//From MSB to the LSB
-  Value += Bit * (2**(BitCount-Index-1));
- };
-
- return Value;
-};
-
-function inflateLZ77(_ReadingContext)
-{
- let CodeTree = [];
-
- let ReadingContext = NULL_READING_CONTEXT;
- ReadingContext = _ReadingContext;  
  
- let NCDS_ZLIB_ReadingContext = createMultiChunkReadingContext(ReadingContext,"IDAT");
-
- let CMF = NCDSReadByte(NCDS_ZLIB_ReadingContext);
- let FLG = NCDSReadByte(NCDS_ZLIB_ReadingContext);
-
- let CompressionMethod = CMF & ZLIB_FLAG_BITMASKS.CompressionMethod;
- let CompressionInfo   = (CMF & ZLIB_FLAG_BITMASKS.CompressionInfo) >> 4;
-
- let FCHECK = FLG & ZLIB_FLAG_BITMASKS.FCheck;
- let FDICT  = (FLG & ZLIB_FLAG_BITMASKS.FDICT) >> 5;
- let FLEVEL = (FLG & ZLIB_FLAG_BITMASKS.FLEVEL) >> 6;
-
- let DICTID = 0;
-
- if (FDICT == 1) {
-   DICTID = NCDSReadNumber(NCDS_ZLIB_ReadingContext);
+ function readBit(_BitReadingContext)
+ {
+  let BitReadingContext = NULL_BIT_READING_CONTEXT;
+  BitReadingContext = _BitReadingContext;
+ 
+  if (BitReadingContext.CurrentByteIndex != BitReadingContext.NCDS_ReadingContext.CurrentGlobalChunkIndex)
+  {
+   BitReadingContext.CurrentByteValue = NCDSReadCurrentByte(BitReadingContext.NCDS_ReadingContext);
+   BitReadingContext.CurrentByteIndex = BitReadingContext.NCDS_ReadingContext.CurrentGlobalChunkIndex;
+  };
+  
+  let BitValue = (BitReadingContext.CurrentByteValue >> BitReadingContext.CurrentBit) & 1;
+  BitReadingContext.CurrentBit++;
+  if (BitReadingContext.CurrentBit == 8)
+  {
+   BitReadingContext.CurrentBit = 0;
+   BitReadingContext.CurrentByteValue = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
+  };
+ 
+  return BitValue;
  };
+ 
+ function readBitsLSB(_BitReadingContext,BitCount=1)
+ {
+  let BitReadingContext = NULL_BIT_READING_CONTEXT;
+  BitReadingContext = _BitReadingContext;
+  let Value = 0;
+ 
+  for (let Index = 0;Index < BitCount;Index++)
+  {
+   let Bit = readBit(BitReadingContext);//From LSB to the MSB
+   Value += Bit * (2**Index);
+  };
+ 
+  return Value;
+ };
+ 
+ function readBitsMSB(_BitReadingContext,BitCount=1)
+ {
+  let BitReadingContext = NULL_BIT_READING_CONTEXT;
+  BitReadingContext = _BitReadingContext;
+  let Value = 0;
+ 
+  for (let Index = 0;Index < BitCount;Index++)
+  {
+   let Bit = readBit(BitReadingContext);//From MSB to the LSB
+   Value += Bit * (2**(BitCount-Index-1));
+  };
+ 
+  return Value;
+ };
+ 
+ function decodeBlockFixedHuffman(_DecompressionContext)
+ {
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
+  DecompressionContext = _DecompressionContext;
+  let BitReadingContext = DecompressionContext.BitReadingContext;
 
- let IsAMultipleOf31 = (CMF * 256 + FLG) % 31 == 0;
+  let Len = readBitsLSB(BitReadingContext,2*8);
+  let NLen = readBitsLSB(BitReadingContext,2*8);
 
- if (!IsAMultipleOf31) {
+  if (BitReadingContext.CurrentBit !== 0)
+  {
+   //Any bits of input up to the next byte boundary are ignored.
+   //The rest of the block consists of the following information:
+   NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
+  };
+
+  let IsValid = (Len ^ NLen) == 0xFFFF;
+
+  if (!IsValid)
+  {
+   console.assert(
+    false,
+    "File corrupted"
+   );
+   return null;
+  };
+
+  for (let Index = 0;Index < Len;Index++)
+  {
+   let Byte = readBitsLSB(BitReadingContext,8);
+   if (Byte === null || Byte === undefined)
+   {
     console.assert(false,
-        "ZLIB data invalid, CMF*256 + FLG bytes must be a multiple of 31"
+      "The read byte doesn't exist"
     );
     return null;
+   };
+   DecompressionContext.DataOutput.insert(Byte);
+  };
  };
 
- let ADLER32_SUM1 = 1;
- let ADLER32_SUM2 = 0;
+ function decodeBlockDynamicHuffman(_DecompressionContext)
+ {
 
- let Iteration = 0;
- let ByteIteration = 0b00000000;
- let BitsInARow = 0;
+ };
 
- let BitReadingContext = createBitReadingContext(NCDS_ZLIB_ReadingContext);
+ function decodeBlockUncompressed(_DecompressionContext)
+ {
 
- let IsBlockFinal = readBit(BitReadingContext);
- let BlockType = readBitsLSB(BitReadingContext,2);
+ };
 
- let Bits = "";
+ function decodeBlock(_DecompressionContext)
+ {
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT
+  DecompressionContext = _DecompressionContext; 
+  let BitReadingContext = DecompressionContext.BitReadingContext;
+ 
+  let IsBlockFinal = readBit(BitReadingContext);
+  let BlockType = readBitsLSB(BitReadingContext,2);
+ 
+  if (BlockType == DEFLATE_BLOCK_TYPES.NO_COMPRESSION){
+   decodeBlockUncompressed(DecompressionContext);
+  }
+  else if(BlockType == DEFLATE_BLOCK_TYPES.FIXED_HUFFMAN_CODES){
+   decodeBlockFixedHuffman(DecompressionContext);
+  } 
+  else if(BlockType == DEFLATE_BLOCK_TYPES.DYNAMIC_HUFFMAN_CODES){
+   decodeBlockDynamicHuffman(DecompressionContext);
+  } else {
+   console.assert(false,
+    "Incorrect block type"
+   );
+   return RETURN_VALUES.ERROR;
+  };
 
- while (true) {
-  let Bit = readBit(BitReadingContext);
-  
-  if (Bit === 1)
+  if (IsBlockFinal)
   {
-   BitsInARow += 1;
-  } else{
-   BitsInARow = 0;
+   return RETURN_VALUES.BLOCK_LAST;
   };
 
-  ByteIteration << 1;
-  ByteIteration |= 1;
-  ByteIteration & EOB;
-  
-  Bits += Bit;
-
-  if (BitsInARow == 8){
-   alert("End of block");
-   break;
-  };
+  return RETURN_VALUES.BLOCK_CONTINUE;
  };
+ 
+ function decodeBlocks(_DecompressionContext)
+ {
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT
+  DecompressionContext = _DecompressionContext; 
+  while (true){
+   let ResponseCode = decodeBlock(DecompressionContext);
+   if (ResponseCode == RETURN_VALUES.BLOCK_CONTINUE)
+   {
+    continue;
+   } else if (ResponseCode == RETURN_VALUES.ERROR)
+   {
+    console.assert(false,
+      "Failed to decode data block"
+    );
+    return false; 
+   } else {
+    break;
+   };
+  };
+  return true;
+ };
+ 
+ function inflateLZ77(_ReadingContext)
+ {
+  let ReadingContext = NULL_READING_CONTEXT;
+  ReadingContext = _ReadingContext;  
+  
+  let NCDS_ZLIB_ReadingContext = createMultiChunkReadingContext(ReadingContext,"IDAT");
+ 
+  let CMF = NCDSReadByte(NCDS_ZLIB_ReadingContext);
+  let FLG = NCDSReadByte(NCDS_ZLIB_ReadingContext);
+ 
+  let CompressionMethod = CMF & ZLIB_FLAG_BITMASKS.CompressionMethod;
+  let CompressionInfo   = (CMF & ZLIB_FLAG_BITMASKS.CompressionInfo) >> 4;
+ 
+  let FCHECK = FLG & ZLIB_FLAG_BITMASKS.FCheck;
+  let FDICT  = (FLG & ZLIB_FLAG_BITMASKS.FDICT) >> 5;
+  let FLEVEL = (FLG & ZLIB_FLAG_BITMASKS.FLEVEL) >> 6;
+ 
+  let DICTID = 0;
+ 
+  if (FDICT == 1) {
+    DICTID = NCDSReadNumber(NCDS_ZLIB_ReadingContext);
+  };
+ 
+  let IsAMultipleOf31 = (CMF * 256 + FLG) % 31 == 0;
+ 
+  if (!IsAMultipleOf31) {
+     console.assert(false,
+         "ZLIB data invalid, CMF*256 + FLG bytes must be a multiple of 31"
+     );
+     return null;
+  };
+ 
+  //bookmark revise
+  let DataOutput = new Vector8(32000);
+ 
+  let BitReadingContext = createBitReadingContext(NCDS_ZLIB_ReadingContext);
+  let DecompressionContext = createDecompressionContext(BitReadingContext);
+ 
+  DecompressionContext.DataOutput = DataOutput;
 
- /* 
-    Adler-32 is composed of two sums accumulated per byte: s1 is
-    the sum of all bytes, s2 is the sum of all s1 values. Both sums
-    are done modulo 65521. s1 is initialized to 1, s2 to zero.  The
-    Adler-32 checksum is stored as s2*65536 + s1 in most-
-    significant-byte first (network) order. 
- */
- ADLER32_SUM2 %= 65521;
- let ADLER32ChS = ADLER32_SUM2*65536 + ADLER32_SUM1;
-};
-
-function deflateLZ77(_Data)
-{
- let Data = NULL_ARRAY;
- Data = _Data;
-
+  decodeBlocks(DecompressionContext);
+  let RealADLER32Chs = NCDSReadNumber(NCDS_ZLIB_ReadingContext);
+ 
+  if (DecompressionContext.ADLER32ChS != RealADLER32Chs)
+  {
+   console.assert(false,
+    "ADLER32 Checksum is invalid / data is invalid"
+   );
+   return null;
+  };
+ 
+  return DataOutput;
+ };
+ 
+ function deflateLZ77(_Data)
+ {
+  let Data = NULL_ARRAY;
+  Data = _Data;
+ 
+ };
+ return {
+  inflateLZ77: inflateLZ77,
+  deflateLZ77: deflateLZ77,
+ };
 };
