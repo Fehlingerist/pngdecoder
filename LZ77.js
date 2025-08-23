@@ -1,7 +1,9 @@
 //RFC 1951
-
+//const NMChunks = PNG();
 function LZ77()
 {
+ const NMChunks = Chunks();
+
  const EOB = 256;//End of (deflate) block
  
  const ZLIB_FLAG_BITMASKS = Object.freeze({
@@ -25,45 +27,43 @@ const RETURN_VALUES = Object.freeze({
  BLOCK_CONTINUE: 0,
  BLOCK_LAST: 1
 });
-
- const STDPNG = PNG();
  
  let NULL_VECTOR8 = new Vector8(0);
  
- let NULL_BASIC_CHUNK = STDPNG._createBasicChunk();
- let NULL_READING_CONTEXT = STDPNG._createReadingContext();
- let NULL_NCDS_READING_CONTEXT = STDPNG._createMultiChunkReadingContext();
+ let NULL_BASIC_CHUNK = NMChunks._createBasicChunk();
+ let NULL_READING_CONTEXT = NMChunks._createReadingContext();
+ let NULL_NCDS_READING_CONTEXT = NMChunks._createMultiChunkReadingContext();
  
  let NULL_BIT_READING_CONTEXT = _createBitReadingContext();
  let NULL_DELFATE_BLOCK = _createDeflateBlockContext();
  let NULL_DECOMPRESSION_CONTEXT = _createDecompressionContext();
  
- let NCDSReadByte = STDPNG.NCDSReadByte;
- let NCDSReadCurrentByte = STDPNG.NCDSReadCurrentByte;
+ let NCDSReadByte = NMChunks.NCDSReadByte;
+ let NCDSReadCurrentByte = NMChunks.NCDSReadCurrentByte;
+ let NCDSReadNumber = NMChunks.NCDSReadNumber;
  
- let createMultiChunkReadingContext = STDPNG.createMultiChunkReadingContext;
- 
+ let createMultiChunkReadingContext = NMChunks.createMultiChunkReadingContext;
  
  function _createDeflateBlockContext()
-{
- return {
-  OutputData: new Vector8(0),
-  BlockType: DEFLATE_BLOCK_TYPES.RESERVED,
-  IsFinalBlock: 0
- };
+ {
+  return {
+   OutputData: new Vector8(0),
+   BlockType: DEFLATE_BLOCK_TYPES.RESERVED,
+   IsFinalBlock: 0
+  };
  };
  
  function _createDecompressionContext()
  {
-   return {
-    BitReadingContext: NULL_BIT_READING_CONTEXT,
-    DataOutput: NULL_VECTOR8,
+  return {
+   BitReadingContext: NULL_BIT_READING_CONTEXT,
+   DataOutput: NULL_VECTOR8,
  
-    ADLER32ChS: 0,
-    ADLER32: 0,
-    ADLER32_SUM1: 0,
-    ADLER32_SUM2: 0
-   }; 
+   ADLER32ChS: 0,
+   ADLER32: 0,
+   ADLER32_SUM1: 0,
+   ADLER32_SUM2: 0
+  }; 
  };
  
  function createDecompressionContext(_BitReadingContext)
@@ -77,6 +77,9 @@ const RETURN_VALUES = Object.freeze({
   };
  
   let InflateDecompressionContext = _createDecompressionContext();
+
+  InflateDecompressionContext.BitReadingContext = BitReadingContext;
+
   InflateDecompressionContext.ADLER32_SUM1 = 1;
   InflateDecompressionContext.ADLER32_SUM2 = 0;
    /* 
@@ -91,31 +94,26 @@ const RETURN_VALUES = Object.freeze({
  };
  
  function _createBitReadingContext(){
- return {
-  NCDS_ReadingContext : NULL_NCDS_READING_CONTEXT,
-  CurrentBit: 0,
-  CurrentByteValue: 0,
-  CurrentByteIndex: 0
- };
- };
- 
- function setDeflateBlockContextData(_DeflateBlockContext, IsFinal, BlockType)
-{
-
+  return {
+   NCDS_ReadingContext : NULL_NCDS_READING_CONTEXT,
+   CurrentBit: 0,
+   CurrentByteValue: 0,
+   CurrentByteIndex: 0 
+  };
  };
  
  function createBitReadingContext(_NCDS_ReadingContext){
- let NCDS_ReadingContext = NULL_NCDS_READING_CONTEXT;
- NCDS_ReadingContext = _NCDS_ReadingContext;
- let BitReadingContext = _createBitReadingContext();
- 
- BitReadingContext.NCDS_ReadingContext = NCDS_ReadingContext;
- BitReadingContext.CurrentByteValue = NCDSReadByte(NCDS_ReadingContext);
-
- BitReadingContext.CurrentBit = 0; 
- //CurrentBit >= 0 & CurrentBit <= 7
-
- return BitReadingContext;
+  let NCDS_ReadingContext = NULL_NCDS_READING_CONTEXT;
+  NCDS_ReadingContext = _NCDS_ReadingContext;
+  let BitReadingContext = _createBitReadingContext();
+  
+  BitReadingContext.NCDS_ReadingContext = NCDS_ReadingContext;
+  BitReadingContext.CurrentByteValue = NCDSReadByte(NCDS_ReadingContext);
+  
+  BitReadingContext.CurrentBit = 0; 
+  //CurrentBit >= 0 & CurrentBit <= 7
+  
+  return BitReadingContext;
  };
  
  function readBit(_BitReadingContext)
@@ -175,16 +173,60 @@ const RETURN_VALUES = Object.freeze({
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
+  
+  let LastByte = 0b00000000;
+
+  let Symbols = [];
+  let Codes = [];
+  let Iterations = 100;
+
+  for (let I = 0;I < Iterations;I++)
+  {
+   let Symbol = readBitsMSB(BitReadingContext,8);
+   let Code = readBit(BitReadingContext);
+   Codes.push(Code);
+   Symbols.push(Symbol);
+  };
+
+  console.log(String.fromCharCode(Symbols));
+ };
+
+ /*
+  Data elements other than Huffman codes are packed
+  starting with the least-significant bit of the data
+  element.
+ */
+ function decodeBlockDynamicHuffman(_DecompressionContext)
+ {
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
+  DecompressionContext = _DecompressionContext;
+  let BitReadingContext = DecompressionContext.BitReadingContext;
+  
+  let LastByte = 0b00000000;
+
+  let Symbols = [];
+  let Codes = [];
+  let Iterations = 100;
+
+  for (let I = 0;I < Iterations;I++)
+  {
+   let Symbol = readBitsMSB(BitReadingContext,8);
+   let Code = readBit(BitReadingContext);
+   Codes.push(Code);
+   Symbols.push(Symbol);
+  };
+
+  console.log(String.fromCharCode(Symbols));
+ };
+
+ function decodeBlockUncompressed(_DecompressionContext)
+ {
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
+  DecompressionContext = _DecompressionContext;
+  let BitReadingContext = DecompressionContext.BitReadingContext;
 
   let Len = readBitsLSB(BitReadingContext,2*8);
   let NLen = readBitsLSB(BitReadingContext,2*8);
-
-  if (BitReadingContext.CurrentBit !== 0)
-  {
-   //Any bits of input up to the next byte boundary are ignored.
-   //The rest of the block consists of the following information:
-   NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
-  };
 
   let IsValid = (Len ^ NLen) == 0xFFFF;
 
@@ -199,7 +241,11 @@ const RETURN_VALUES = Object.freeze({
 
   for (let Index = 0;Index < Len;Index++)
   {
-   let Byte = readBitsLSB(BitReadingContext,8);
+   let Byte = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
+   //LE interpreted as BE Unsigned Integer
+   //It should be done for all bytes
+
+   //non-compressible blocks are limited to 65,535 bytes.
    if (Byte === null || Byte === undefined)
    {
     console.assert(false,
@@ -209,16 +255,7 @@ const RETURN_VALUES = Object.freeze({
    };
    DecompressionContext.DataOutput.insert(Byte);
   };
- };
-
- function decodeBlockDynamicHuffman(_DecompressionContext)
- {
-
- };
-
- function decodeBlockUncompressed(_DecompressionContext)
- {
-
+  return true;
  };
 
  function decodeBlock(_DecompressionContext)
@@ -230,18 +267,25 @@ const RETURN_VALUES = Object.freeze({
   let IsBlockFinal = readBit(BitReadingContext);
   let BlockType = readBitsLSB(BitReadingContext,2);
  
+  let Success = false;
+
   if (BlockType == DEFLATE_BLOCK_TYPES.NO_COMPRESSION){
-   decodeBlockUncompressed(DecompressionContext);
+   Success = decodeBlockUncompressed(DecompressionContext);
   }
   else if(BlockType == DEFLATE_BLOCK_TYPES.FIXED_HUFFMAN_CODES){
-   decodeBlockFixedHuffman(DecompressionContext);
+   Success = decodeBlockFixedHuffman(DecompressionContext);
   } 
   else if(BlockType == DEFLATE_BLOCK_TYPES.DYNAMIC_HUFFMAN_CODES){
-   decodeBlockDynamicHuffman(DecompressionContext);
+   Success = decodeBlockDynamicHuffman(DecompressionContext);
   } else {
    console.assert(false,
     "Incorrect block type"
    );
+   return RETURN_VALUES.ERROR;
+  };
+
+  if (!Success)
+  {
    return RETURN_VALUES.ERROR;
   };
 
