@@ -1,0 +1,21 @@
+Read from MSB (Most significant bit (left to right))
+
+ZLIB blocks header format
+
+BFINAL 1 bit
+BTYPE 2 bits:
+ Non-Compressed blocks format:
+  |LEN||NLEN||LEN bytes of data|
+ Dynamic Huffman blocks format:
+  |2^5 * 5 bit long huffman code|
+  0-15 5 bit codes mean that I write values correpsonding 
+  to their initial value in the codes table
+  16 - copy the previous code 3-6 times depending on the 2 bit uint after the 5 bit value 
+  aka 3 + (2 bit value) is the amount of copies.
+  17 - Repeat a code length of 0 for 3 - 10 times. (3 bits of length)
+  18 - Repeat a code length of 0 for 11 - 138 times (7 bits of length)
+  |compressed data|  
+ Fixed Huffman blocks format:
+
+
+  

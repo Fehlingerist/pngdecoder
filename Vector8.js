@@ -2,7 +2,8 @@ class Vector8
 {
  LastFreeIndex = 0;
  Capacity = 0;
- Array = new Uint8Array()
+ Array = new Uint8Array();
+ Accumulation = 1.0;
 
  constructor(SizeInBytes=0)
  { 
@@ -10,9 +11,9 @@ class Vector8
   this.Array = new Uint8Array(SizeInBytes);
  };
 
- increaseCapacity()
+ resize(NewCapacity=this.Capacity*(++this.Accumulation))
  {
-  this.Capacity *= 1.5;
+  this.Capacity = NewCapacity;
   this.Capacity = Math.ceil(this.Capacity);
   try {
     let NewArray = new Uint8Array(this.Capacity);
@@ -22,6 +23,26 @@ class Vector8
     console.assert(false, "Not enough memory / failed to create new array");
     return false;
   }
+  return true;
+ };
+
+ increaseCapacity()
+ {
+  return this.resize();
+ };
+
+ set(Byte,Index)
+ {
+  if (Index === null)
+  {
+   console.assert(false,"Can't set Index of the array, when the said index is a typeof null");
+   return false;
+  };
+  if (this.Capacity <= Index)
+  {
+   return this.resize(Index*(++this.Accumulation));
+  };
+  this.Array[Index] = Byte;
   return true;
  };
 
@@ -41,6 +62,17 @@ class Vector8
    Index = this.LastFreeIndex;
    this.LastFreeIndex++;
   };
+  if (this.LastFreeIndex < Index)
+  {
+   console.assert(false,`
+    Can't set values outside of the last free index boundary. \n 
+    for that, make use of set function, which is less restricted`);
+   return false;
+  } else if(this.LastFreeIndex == Index)
+  {
+   this.LastFreeIndex++;
+  };
+
   this.Array[Index] = Byte;
   return true;
  };

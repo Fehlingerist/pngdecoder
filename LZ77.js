@@ -1,7 +1,46 @@
 //RFC 1951
 //const NMChunks = PNG();
+
 function LZ77()
 {
+ function CSTE(Code, ExtraBits=0, LengthMin=0, LengthMax=LengthMin)//create symbol table element
+ {
+  return {
+    Code: Code,
+    ExtraBits: ExtraBits,
+    Min: LengthMin,
+    Max: LengthMax
+  };
+ };
+ 
+ const LengthCodesTable = Object.freeze([
+  CSTE(257,0,3), CSTE(258,0,4), CSTE(259,0,5), CSTE(260,0,6),
+  CSTE(261,0,7), CSTE(262,0,8), CSTE(263,0,9), CSTE(264,0,10),
+  CSTE(265,1,11,12), CSTE(266,1,13,14), CSTE(267,1,15,16), CSTE(268,1,17,18),
+  CSTE(269,2,19,22), CSTE(270,2,23,26), CSTE(271,2,27,30), CSTE(272,2,31,34),
+  CSTE(273,3,35,42), CSTE(274,3,43,50), CSTE(275,3,51,58), CSTE(276,3,59,66),
+  CSTE(277,4,67,82), CSTE(278,4,83,98), CSTE(279,4,99,114), CSTE(280,4,115,130),
+  CSTE(281,5,131,162), CSTE(282,5,163,194), CSTE(283,5,195,226), 
+  CSTE(284,5,227,257), CSTE(285,0,258),
+ ]); 
+ const DistancesCodesTable = Object.freeze([
+  CSTE(0,0,1), CSTE(1,0,2), 
+  CSTE(2,0,3), CSTE(3,0,4),
+  CSTE(4,1,5,6), CSTE(5,1,7,8), 
+  CSTE(6,2,9,12), CSTE(7,2,13,16),
+  CSTE(8,3,17,24), CSTE(9,3,25,32), 
+  CSTE(10,4,33,48), CSTE(11,4,49,64),
+  CSTE(12,5,65,96), CSTE(13,5,97,128), 
+  CSTE(14,6,129,192), CSTE(15,6,193,256),
+  CSTE(16,7,257,384), CSTE(17,7,385,512), 
+  CSTE(18,8,513,768), CSTE(19,8,769,1024),
+  CSTE(20,9,1025,1536), CSTE(21,9,1537,2028), 
+  CSTE(22,10,2049,3072), CSTE(23,10,3073,4096),
+  CSTE(24,11,4097,6144), CSTE(25,11,6145,8192), 
+  CSTE(26,12,8193,12288), CSTE(27,12,12289,16384), 
+  CSTE(28,13,16385,24576), CSTE(29,13,24577,32768),
+ ]); //for fixed huffman
+
  const NMChunks = Chunks();
 
  const EOB = 256;//End of (deflate) block
@@ -44,6 +83,14 @@ const RETURN_VALUES = Object.freeze({
  
  let createMultiChunkReadingContext = NMChunks.createMultiChunkReadingContext;
  
+ function LITValueToBitsLength(LIT)
+ {
+  if (LIT <= 143){return 8;}
+  else if (LIT <= 255){return 9;}
+  else if (LIT <= 279){return 7;}
+  else {return 8;};
+ };
+
  function _createDeflateBlockContext()
  {
   return {
@@ -167,9 +214,16 @@ const RETURN_VALUES = Object.freeze({
  
   return Value;
  };
+
+ function updateADLER32Val(_DecompressionContext,ByteValue)
+ {
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
+  DecompressionContext = _DecompressionContext;
+ };
  
  function decodeBlockFixedHuffman(_DecompressionContext)
  {
+  //bookmark not finished
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
@@ -198,29 +252,31 @@ const RETURN_VALUES = Object.freeze({
  */
  function decodeBlockDynamicHuffman(_DecompressionContext)
  {
+  //bookmark not finished
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
   
-  let LastByte = 0b00000000;
+  let HLIT = readBitsMSB(BitReadingContext,5);
+  let HDIST = readBitsMSB(BitReadingContext,5);
+  let HCLEN = readBitsMSB(BitReadingContext,4);
 
-  let Symbols = [];
-  let Codes = [];
-  let Iterations = 100;
+  let HCLENEntriesToRead = (HCLEN + 4)
+  let HCLENBits = HCLENEntriesToRead  * 3; 
 
-  for (let I = 0;I < Iterations;I++)
+
+  let HCLENCodes = new Uint8Array(HCLENEntriesToRead);
+
+  for (let i = 0;i < HCLENEntriesToRead;i++)
   {
-   let Symbol = readBitsMSB(BitReadingContext,8);
-   let Code = readBit(BitReadingContext);
-   Codes.push(Code);
-   Symbols.push(Symbol);
+   console.log(`${i} Length Code: ${readBitsMSB(BitReadingContext,3)}`);
   };
-
-  console.log(String.fromCharCode(Symbols));
+  console.error("");
  };
 
  function decodeBlockUncompressed(_DecompressionContext)
  {
+  //bookmark not finished
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
