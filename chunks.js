@@ -342,7 +342,7 @@ function Chunks()
   }
     function getCRCOfBuffer(ByteBuffer){
    let CRC = BIT32_MAX;
-   //bookmark not finished
+   //bookmark unfinished
   }
 
   function readChunk(_ReadingContext)

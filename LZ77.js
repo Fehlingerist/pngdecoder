@@ -1,15 +1,18 @@
 //RFC 1951
 //const NMChunks = PNG();
 
+//start since the headers of the deflate blocks
+let code = "";
+
 function LZ77()
 {
- function CSTE(Code, ExtraBits=0, LengthMin=0, LengthMax=LengthMin)//create symbol table element
+ function CSTE(Code, ExtraBits=0, Min=0, Max=Min)//create table element
  {
   return {
     Code: Code,
     ExtraBits: ExtraBits,
-    Min: LengthMin,
-    Max: LengthMax
+    Min: Min,
+    Max: Max
   };
  };
  
@@ -82,14 +85,6 @@ const RETURN_VALUES = Object.freeze({
  let NCDSReadNumber = NMChunks.NCDSReadNumber;
  
  let createMultiChunkReadingContext = NMChunks.createMultiChunkReadingContext;
- 
- function LITValueToBitsLength(LIT)
- {
-  if (LIT <= 143){return 8;}
-  else if (LIT <= 255){return 9;}
-  else if (LIT <= 279){return 7;}
-  else {return 8;};
- };
 
  function _createDeflateBlockContext()
  {
@@ -181,7 +176,7 @@ const RETURN_VALUES = Object.freeze({
    BitReadingContext.CurrentBit = 0;
    BitReadingContext.CurrentByteValue = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
   };
- 
+
   return BitValue;
  };
  
@@ -215,36 +210,78 @@ const RETURN_VALUES = Object.freeze({
   return Value;
  };
 
- function updateADLER32Val(_DecompressionContext,ByteValue)
+ function updateADLER32Val(_DecompressionContext)
  {
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
+ };
+
+ function ReadLiteralLengthSymbol(_DecompressionContext)
+ {
+  /* 
+       Lit Value    Bits        Codes
+       ---------    ----        -----
+         0 - 143     8          00110000(48) through 10111111(191)
+       144 - 255     9          110010000(400) through 111111111(511)
+       256 - 279     7          0000000(0) through 0010111(23)
+       280 - 287     8          11000000(192) through 11000111(199)  
+  */
+  //later can be optimized, because there are too many branches
+  //bookmark update (perhaps not, because I still have to check tables couple of times, I'll see)
+  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
+  DecompressionContext = _DecompressionContext;
+  let BitReadingContext = DecompressionContext.BitReadingContext;
+  let ThirdGroupBits = readBitsMSB(BitReadingContext,7);
+  if (ThirdGroupBits >= 0 && ThirdGroupBits <= 23)
+  {
+   return ThirdGroupBits + 256;
+  };
+  let FirstAndFourthGroupBits = (ThirdGroupBits << 1) + readBit(BitReadingContext);
+  if (FirstAndFourthGroupBits <= 191)
+  {
+   return FirstAndFourthGroupBits - 48;
+  }
+  else if(FirstAndFourthGroupBits <= 199)
+  {
+   return FirstAndFourthGroupBits + 88;
+  };
+  return ((FirstAndFourthGroupBits << 1) + readBit(BitReadingContext)) - 356;
  };
  
  function decodeBlockFixedHuffman(_DecompressionContext)
  {
-  //bookmark not finished
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
-  
-  let LastByte = 0b00000000;
-
-  let Symbols = [];
-  let Codes = [];
-  let Iterations = 100;
-
-  for (let I = 0;I < Iterations;I++)
+  let EndOfBlock = false;
+  do 
   {
-   let Symbol = readBitsMSB(BitReadingContext,8);
-   let Code = readBit(BitReadingContext);
-   Codes.push(Code);
-   Symbols.push(Symbol);
-  };
+   let Lit = ReadLiteralLengthSymbol(DecompressionContext);
+   if (Lit < 256)
+   {
+    let Success = DecompressionContext.DataOutput.insert(Lit);
+    if (!Success)
+    {
+     console.assert(false,"Failed to insert a byte");
+     break;
+    };
+    continue; 
+   }
+   else if(Lit == 256)
+   {
+    EndOfBlock = true;
+    break;
+   }
+   else if (Lit > 285)
+   {
+    console.assert(false,"Lit shouldn't be greater than 285, because there's no such cases considered");
+    break;
+   };
+   
+  } while (!EndOfBlock);
 
-  console.log(String.fromCharCode(Symbols));
+  return EndOfBlock;
  };
-
  /*
   Data elements other than Huffman codes are packed
   starting with the least-significant bit of the data
@@ -252,31 +289,23 @@ const RETURN_VALUES = Object.freeze({
  */
  function decodeBlockDynamicHuffman(_DecompressionContext)
  {
-  //bookmark not finished
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
-  
-  let HLIT = readBitsMSB(BitReadingContext,5);
-  let HDIST = readBitsMSB(BitReadingContext,5);
-  let HCLEN = readBitsMSB(BitReadingContext,4);
-
-  let HCLENEntriesToRead = (HCLEN + 4)
-  let HCLENBits = HCLENEntriesToRead  * 3; 
-
-
-  let HCLENCodes = new Uint8Array(HCLENEntriesToRead);
-
-  for (let i = 0;i < HCLENEntriesToRead;i++)
-  {
-   console.log(`${i} Length Code: ${readBitsMSB(BitReadingContext,3)}`);
-  };
-  console.error("");
+  //bookmark unfinished
+  /* 
+   Decode the huffman code to retrieve tables 
+   and then pass it to the huffman block decoder
+  */
+  let LengthCodesTable = [];
+  let DistancesCodesTable = []; 
+  //bookmark decode here instead
+  /*code*/
+  //stinky -> //return decodeBlockHuffman(DecompressionContext,DistancesCodesTable,LengthCodesTable);
  };
 
  function decodeBlockUncompressed(_DecompressionContext)
  {
-  //bookmark not finished
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
@@ -292,7 +321,7 @@ const RETURN_VALUES = Object.freeze({
     false,
     "File corrupted"
    );
-   return null;
+   return false;
   };
 
   for (let Index = 0;Index < Len;Index++)
@@ -307,7 +336,7 @@ const RETURN_VALUES = Object.freeze({
     console.assert(false,
       "The read byte doesn't exist"
     );
-    return null;
+    return false;
    };
    DecompressionContext.DataOutput.insert(Byte);
   };
@@ -321,7 +350,7 @@ const RETURN_VALUES = Object.freeze({
   let BitReadingContext = DecompressionContext.BitReadingContext;
  
   let IsBlockFinal = readBit(BitReadingContext);
-  let BlockType = readBitsLSB(BitReadingContext,2);
+  let BlockType = readBitsMSB(BitReadingContext,2);
  
   let Success = false;
 

@@ -1,3 +1,6 @@
+<length, backward distance> length = 1 byte value + 3 offset / backward distance = 2 byte value + 1
+
+
 Read from MSB (Most significant bit (left to right))
 
 ZLIB blocks header format
@@ -8,7 +11,7 @@ BTYPE 2 bits:
   |LEN||NLEN||LEN bytes of data|
  Dynamic Huffman blocks format:
   |2^5 * 5 bit long huffman code|
-  0-15 5 bit codes mean that I write values correpsonding 
+  0-15 5 bit codes mean that I write values corresponding 
   to their initial value in the codes table
   16 - copy the previous code 3-6 times depending on the 2 bit uint after the 5 bit value 
   aka 3 + (2 bit value) is the amount of copies.
