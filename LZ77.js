@@ -2,7 +2,9 @@
 //const NMChunks = PNG();
 
 //start since the headers of the deflate blocks
-let code = "";
+let codeOutput = {};
+let codes = "";
+let bits = "";
 
 function LZ77()
 {
@@ -15,7 +17,7 @@ function LZ77()
     Max: Max
   };
  };
- 
+
  const LengthCodesTable = Object.freeze([
   CSTE(257,0,3), CSTE(258,0,4), CSTE(259,0,5), CSTE(260,0,6),
   CSTE(261,0,7), CSTE(262,0,8), CSTE(263,0,9), CSTE(264,0,10),
@@ -176,7 +178,7 @@ const RETURN_VALUES = Object.freeze({
    BitReadingContext.CurrentBit = 0;
    BitReadingContext.CurrentByteValue = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
   };
-
+  bits += BitValue;
   return BitValue;
  };
  
@@ -257,6 +259,7 @@ const RETURN_VALUES = Object.freeze({
   do 
   {
    let Lit = ReadLiteralLengthSymbol(DecompressionContext);
+   codes += `${Lit} `;
    if (Lit < 256)
    {
     let Success = DecompressionContext.DataOutput.insert(Lit);
@@ -277,7 +280,23 @@ const RETURN_VALUES = Object.freeze({
     console.assert(false,"Lit shouldn't be greater than 285, because there's no such cases considered");
     break;
    };
-   
+   let LiteralLengthData = LengthCodesTable[Lit - 257];
+   let LengthToCopy = LiteralLengthData.Min + readBitsMSB(BitReadingContext,LiteralLengthData.ExtraBits);
+   let DistanceCode = readBitsMSB(BitReadingContext,5);
+   if (DistanceCode >= 30) {
+    console.assert(false,"unknown field");
+    break;
+   };
+   let DistanceToMoveBackData = DistancesCodesTable[DistanceCode];
+   let DistanceToMoveBack = DistanceToMoveBackData.Min + readBitsMSB(BitReadingContext,DistanceToMoveBackData.ExtraBits);
+   let PivotIndex = (DecompressionContext.DataOutput.LastFreeIndex) - DistanceToMoveBack;
+
+   codes += `Length to copy: ${LengthToCopy} Distance to move backwards: ${DistanceToMoveBack} `;
+
+   for (let Index = PivotIndex;Index < PivotIndex + LengthToCopy;Index++)
+   {
+    DecompressionContext.DataOutput.insert(DecompressionContext.DataOutput.readAt(Index));
+   };
   } while (!EndOfBlock);
 
   return EndOfBlock;
@@ -310,8 +329,9 @@ const RETURN_VALUES = Object.freeze({
   DecompressionContext = _DecompressionContext;
   let BitReadingContext = DecompressionContext.BitReadingContext;
 
-  let Len = readBitsLSB(BitReadingContext,2*8);
-  let NLen = readBitsLSB(BitReadingContext,2*8);
+  let Len = readBitsLSB(BitReadingContext,16);
+  let NLen = readBitsLSB(BitReadingContext,16);
+  console.log(Len);
 
   let IsValid = (Len ^ NLen) == 0xFFFF;
 
@@ -437,7 +457,8 @@ const RETURN_VALUES = Object.freeze({
   };
  
   //bookmark revise
-  let DataOutput = new Vector8(32000);
+  let DataOutput = new Vector8(10);
+  codeOutput = DataOutput;
  
   let BitReadingContext = createBitReadingContext(NCDS_ZLIB_ReadingContext);
   let DecompressionContext = createDecompressionContext(BitReadingContext);

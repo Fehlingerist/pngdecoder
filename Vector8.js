@@ -78,7 +78,7 @@ class Vector8
  };
  readAt(Index)
  {
-  if (this.LastFreeIndex <= Index)
+  if (this.LastFreeIndex <= Index || Index < 0)
   {
    console.assert(false,
     `Attempted to read an entry from outside of the 
