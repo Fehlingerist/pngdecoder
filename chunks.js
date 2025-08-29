@@ -180,6 +180,10 @@ function Chunks()
 
    return Number;
   };
+ 
+  function NCDSWriteByte(_MultiChunkReadingContext) {
+   //bookmark unfinished
+  };
 
   function chunkHasBeenRead(_ReadingContext,_BasicChunk){
    let ReadingContext = NULL_READING_CONTEXT;

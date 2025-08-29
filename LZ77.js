@@ -39,7 +39,7 @@ function LZ77()
   CSTE(14,6,129,192), CSTE(15,6,193,256),
   CSTE(16,7,257,384), CSTE(17,7,385,512), 
   CSTE(18,8,513,768), CSTE(19,8,769,1024),
-  CSTE(20,9,1025,1536), CSTE(21,9,1537,2028), 
+  CSTE(20,9,1025,1536), CSTE(21,9,1537,2048), 
   CSTE(22,10,2049,3072), CSTE(23,10,3073,4096),
   CSTE(24,11,4097,6144), CSTE(25,11,6145,8192), 
   CSTE(26,12,8193,12288), CSTE(27,12,12289,16384), 
@@ -49,6 +49,11 @@ function LZ77()
  const NMChunks = Chunks();
 
  const EOB = 256;//End of (deflate) block
+ 
+ const BIT_TOGGLE = -1;
+ const CURRNET_BIT = -1;
+ const CURRENT_BYTE = -1;
+
  
  const ZLIB_FLAG_BITMASKS = Object.freeze({
   CompressionMethod: 0b00001111,
@@ -160,6 +165,38 @@ const RETURN_VALUES = Object.freeze({
   return BitReadingContext;
  };
  
+ function writeBit(_BitReadingContext,BitValue=-1,BitIndex=-1,Byte=-1)
+ {
+  if (BitIndex < 0 || BitIndex >= 8)
+  {
+   console.assert(false,"incorrect bit index");
+   return false; 
+  } else if(Byte < 0 || Byte >= BitReadingContext.NCDS_ReadingContext.Length){
+    console.assert(false,"incorrect byte index");   
+    return false;
+  };
+  
+  //bit value == -1 means bit toggle
+  let BitReadingContext = NULL_BIT_READING_CONTEXT;
+  BitReadingContext = _BitReadingContext;
+
+  if (!(Byte == CURRENT_BYTE))
+  {
+   Byte = BitReadingContext.NCDS_ReadingContext.CurrentGlobalChunkIndex;
+  };
+
+  if (!(BitIndex == CURRNET_BIT))
+  {
+   BitIndex = BitReadingContext.CurrentBit; 
+  };
+
+  if (BitValue == BIT_TOGGLE)
+  {
+   return true; 
+  };
+  //if bit assign
+ };
+
  function readBit(_BitReadingContext)
  {
   let BitReadingContext = NULL_BIT_READING_CONTEXT;
@@ -178,7 +215,6 @@ const RETURN_VALUES = Object.freeze({
    BitReadingContext.CurrentBit = 0;
    BitReadingContext.CurrentByteValue = NCDSReadByte(BitReadingContext.NCDS_ReadingContext);
   };
-  bits += BitValue;
   return BitValue;
  };
  
@@ -218,37 +254,38 @@ const RETURN_VALUES = Object.freeze({
   DecompressionContext = _DecompressionContext;
  };
 
- function ReadLiteralLengthSymbol(_DecompressionContext)
- {
-  /* 
-       Lit Value    Bits        Codes
-       ---------    ----        -----
-         0 - 143     8          00110000(48) through 10111111(191)
-       144 - 255     9          110010000(400) through 111111111(511)
-       256 - 279     7          0000000(0) through 0010111(23)
-       280 - 287     8          11000000(192) through 11000111(199)  
-  */
-  //later can be optimized, because there are too many branches
-  //bookmark update (perhaps not, because I still have to check tables couple of times, I'll see)
-  let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
-  DecompressionContext = _DecompressionContext;
-  let BitReadingContext = DecompressionContext.BitReadingContext;
-  let ThirdGroupBits = readBitsMSB(BitReadingContext,7);
-  if (ThirdGroupBits >= 0 && ThirdGroupBits <= 23)
+  function ReadLiteralLengthSymbol(_DecompressionContext)
   {
-   return ThirdGroupBits + 256;
+    /* 
+        Lit Value    Bits        Codes
+        ---------    ----        -----
+          0 - 143     8          00110000(48) through 10111111(191)
+        144 - 255     9          110010000(400) through 111111111(511)
+        256 - 279     7          0000000(0) through 0010111(23)
+        280 - 287     8          11000000(192) through 11000111(199)  
+    */
+    //later can be optimized, because there are too many branches
+    //bookmark update (perhaps not, because I still have to check tables couple of times, I'll see)
+    let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
+    DecompressionContext = _DecompressionContext;
+    let BitReadingContext = DecompressionContext.BitReadingContext;
+    let ThirdGroupBits = readBitsMSB(BitReadingContext,7);
+    if (ThirdGroupBits >= 0 && ThirdGroupBits <= 23)
+    {
+     return ThirdGroupBits + 256;
+    };
+    let FirstAndFourthGroupBits = (ThirdGroupBits << 1) + readBit(BitReadingContext);
+    if (FirstAndFourthGroupBits <= 191)
+    {
+     return FirstAndFourthGroupBits - 48;
+    }
+    else if(FirstAndFourthGroupBits <= 199)
+    {
+     return FirstAndFourthGroupBits + 88;
+    };
+    let SecondGroup = ((FirstAndFourthGroupBits << 1) + readBit(BitReadingContext)) - 256;
+    return SecondGroup;
   };
-  let FirstAndFourthGroupBits = (ThirdGroupBits << 1) + readBit(BitReadingContext);
-  if (FirstAndFourthGroupBits <= 191)
-  {
-   return FirstAndFourthGroupBits - 48;
-  }
-  else if(FirstAndFourthGroupBits <= 199)
-  {
-   return FirstAndFourthGroupBits + 88;
-  };
-  return ((FirstAndFourthGroupBits << 1) + readBit(BitReadingContext)) - 356;
- };
  
  function decodeBlockFixedHuffman(_DecompressionContext)
  {
@@ -259,7 +296,6 @@ const RETURN_VALUES = Object.freeze({
   do 
   {
    let Lit = ReadLiteralLengthSymbol(DecompressionContext);
-   codes += `${Lit} `;
    if (Lit < 256)
    {
     let Success = DecompressionContext.DataOutput.insert(Lit);
@@ -281,21 +317,21 @@ const RETURN_VALUES = Object.freeze({
     break;
    };
    let LiteralLengthData = LengthCodesTable[Lit - 257];
-   let LengthToCopy = LiteralLengthData.Min + readBitsMSB(BitReadingContext,LiteralLengthData.ExtraBits);
-   let DistanceCode = readBitsMSB(BitReadingContext,5);
+   let LengthToCopy = LiteralLengthData.Min + readBitsLSB(BitReadingContext,LiteralLengthData.ExtraBits);
+   let DistanceCode = readBitsLSB(BitReadingContext,5) ;
    if (DistanceCode >= 30) {
     console.assert(false,"unknown field");
     break;
    };
    let DistanceToMoveBackData = DistancesCodesTable[DistanceCode];
-   let DistanceToMoveBack = DistanceToMoveBackData.Min + readBitsMSB(BitReadingContext,DistanceToMoveBackData.ExtraBits);
+   let DistanceToMoveBack = DistanceToMoveBackData.Min + readBitsLSB(BitReadingContext,DistanceToMoveBackData.ExtraBits); 
    let PivotIndex = (DecompressionContext.DataOutput.LastFreeIndex) - DistanceToMoveBack;
-
-   codes += `Length to copy: ${LengthToCopy} Distance to move backwards: ${DistanceToMoveBack} `;
 
    for (let Index = PivotIndex;Index < PivotIndex + LengthToCopy;Index++)
    {
-    DecompressionContext.DataOutput.insert(DecompressionContext.DataOutput.readAt(Index));
+    let Value = DecompressionContext.DataOutput.readAt(Index);
+    if (Value === null) {break;};
+    DecompressionContext.DataOutput.insert(Value);
    };
   } while (!EndOfBlock);
 
@@ -318,6 +354,15 @@ const RETURN_VALUES = Object.freeze({
   */
   let LengthCodesTable = [];
   let DistancesCodesTable = []; 
+
+  let HuffmanCodeLengths = [];
+
+  let HLIT = 257 + readBitsLSB(BitReadingContext,5);
+  let HDIST = 1 + readBitsLSB(BitReadingContext,5);
+  let HCLEN = 4 + readBitsLSB(BitReadingContext,4);
+
+  let CodeLengths = new Vector8(32);
+
   //bookmark decode here instead
   /*code*/
   //stinky -> //return decodeBlockHuffman(DecompressionContext,DistancesCodesTable,LengthCodesTable);
@@ -370,7 +415,7 @@ const RETURN_VALUES = Object.freeze({
   let BitReadingContext = DecompressionContext.BitReadingContext;
  
   let IsBlockFinal = readBit(BitReadingContext);
-  let BlockType = readBitsMSB(BitReadingContext,2);
+  let BlockType = readBitsLSB(BitReadingContext,2);
  
   let Success = false;
 
