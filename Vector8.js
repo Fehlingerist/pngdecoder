@@ -31,9 +31,9 @@ class Vector8
   return this.resize();
  };
 
- set(Byte,Index)
+ set(Byte=0,Index=-1)
  {
-  if (Index === null)
+  if (Index == -1)
   {
    console.assert(false,"Can't set Index of the array, when the said index is a typeof null");
    return false;
@@ -46,7 +46,7 @@ class Vector8
   return true;
  };
 
- insert(Byte,Index=-1)
+ insert(Byte=0,Index=-1)
  {
   if (Index == -1)
   {
@@ -76,7 +76,7 @@ class Vector8
   this.Array[Index] = Byte;
   return true;
  };
- readAt(Index)
+ readAt(Index=-1)
  {
   if (this.LastFreeIndex <= Index || Index < 0)
   {

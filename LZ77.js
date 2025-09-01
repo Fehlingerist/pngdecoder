@@ -1,6 +1,4 @@
 //RFC 1951
-//const NMChunks = PNG();
-
 //start since the headers of the deflate blocks
 let codeOutput = {};
 let codes = "";
@@ -17,6 +15,17 @@ function LZ77()
     Max: Max
   };
  };
+
+ const BIT_MASK = Object.freeze([
+  0b1,
+  0b11,
+  0b111,
+  0b1111,
+  0b11111,
+  0b111111,
+  0b1111111,
+  0b11111111
+ ]);
 
  const LengthCodesTable = Object.freeze([
   CSTE(257,0,3), CSTE(258,0,4), CSTE(259,0,5), CSTE(260,0,6),
@@ -164,37 +173,47 @@ const RETURN_VALUES = Object.freeze({
   
   return BitReadingContext;
  };
+
+ function writeByte(_DataStream,ByteValue=0,ByteIndex=CURRENT_BYTE)
+ {
+  let DataStream = NULL_VECTOR8;
+  DataStream = _DataStream;
+  DataStream.insert(ByteValue,ByteIndex);
+ };
  
- function writeBit(_BitReadingContext,BitValue=-1,BitIndex=-1,Byte=-1)
+ function writeBit(CurrentByte,BitIndex,BitValue=BIT_TOGGLE)
  {
   if (BitIndex < 0 || BitIndex >= 8)
   {
    console.assert(false,"incorrect bit index");
-   return false; 
-  } else if(Byte < 0 || Byte >= BitReadingContext.NCDS_ReadingContext.Length){
-    console.assert(false,"incorrect byte index");   
-    return false;
+   return null; 
+  } else if(BitValue != 0 && BitValue != 1 && BitValue != BIT_TOGGLE){
+   console.assert(false,"incorrect byte index");   
+   return null;
   };
-  
-  //bit value == -1 means bit toggle
-  let BitReadingContext = NULL_BIT_READING_CONTEXT;
-  BitReadingContext = _BitReadingContext;
-
-  if (!(Byte == CURRENT_BYTE))
-  {
-   Byte = BitReadingContext.NCDS_ReadingContext.CurrentGlobalChunkIndex;
-  };
-
-  if (!(BitIndex == CURRNET_BIT))
-  {
-   BitIndex = BitReadingContext.CurrentBit; 
-  };
-
+  let Pos = 1 << BitIndex;//better to precompute or sth
   if (BitValue == BIT_TOGGLE)
   {
-   return true; 
+   return CurrentByte ^ Pos;
   };
-  //if bit assign
+  let Value = BitValue << BitIndex;
+  return (CurrentByte & (~Pos)) | Value;
+ }; 
+
+ function writeByteInByte(CurrentByte=0,WriteByte=0,Offset=0,SliceLeft=0,SliceRight=8)
+ {
+  let MoveRight = SliceRight - 8;
+  let MoveLeft = SliceLeft;
+  WriteByte = (
+    (
+     (
+      WriteByte >> MoveRight
+     ) << MoveLeft
+    ) & BIT_MASK[7]
+  ) >> Offset;
+  CurrentByte &= ~BIT_MASK[Offset];
+  CurrentByte |= WriteByte;
+  return CurrentByte;
  };
 
  function readBit(_BitReadingContext)
@@ -223,13 +242,11 @@ const RETURN_VALUES = Object.freeze({
   let BitReadingContext = NULL_BIT_READING_CONTEXT;
   BitReadingContext = _BitReadingContext;
   let Value = 0;
- 
   for (let Index = 0;Index < BitCount;Index++)
   {
    let Bit = readBit(BitReadingContext);//From LSB to the MSB
    Value += Bit * (2**Index);
   };
- 
   return Value;
  };
  
@@ -248,13 +265,14 @@ const RETURN_VALUES = Object.freeze({
   return Value;
  };
 
- function updateADLER32Val(_DecompressionContext)
+ function updateADLER32Val(_DecompressionContext,Byte)
  {
   let DecompressionContext = NULL_DECOMPRESSION_CONTEXT;
   DecompressionContext = _DecompressionContext;
+  //bookmark ADLER32 
  };
 
-  function ReadLiteralLengthSymbol(_DecompressionContext)
+ function readLiteralLengthSymbol(_DecompressionContext)
   {
     /* 
         Lit Value    Bits        Codes
@@ -285,7 +303,7 @@ const RETURN_VALUES = Object.freeze({
     };
     let SecondGroup = ((FirstAndFourthGroupBits << 1) + readBit(BitReadingContext)) - 256;
     return SecondGroup;
-  };
+ };
  
  function decodeBlockFixedHuffman(_DecompressionContext)
  {
@@ -295,7 +313,7 @@ const RETURN_VALUES = Object.freeze({
   let EndOfBlock = false;
   do 
   {
-   let Lit = ReadLiteralLengthSymbol(DecompressionContext);
+   let Lit = readLiteralLengthSymbol(DecompressionContext);
    if (Lit < 256)
    {
     let Success = DecompressionContext.DataOutput.insert(Lit);
@@ -334,7 +352,6 @@ const RETURN_VALUES = Object.freeze({
     DecompressionContext.DataOutput.insert(Value);
    };
   } while (!EndOfBlock);
-
   return EndOfBlock;
  };
  /*
@@ -361,7 +378,53 @@ const RETURN_VALUES = Object.freeze({
   let HDIST = 1 + readBitsLSB(BitReadingContext,5);
   let HCLEN = 4 + readBitsLSB(BitReadingContext,4);
 
-  let CodeLengths = new Vector8(32);
+  let LiteralLengthCodes = new Vector8(HLIT);
+  let DistanceCodes = new Vector8(HCLEN);
+
+  let CodeLengthsToCharacters = [];
+
+  //literal/length codes
+
+  for (let DecodedCodes = 0;DecodedCodes < HLIT;DecodedCodes++)
+  {
+   let Code = readBitsMSB(BitReadingContext,5);
+   let BitsToRead = 0;
+   let MinOffset = 0;
+   let CopyVal = 0;
+
+   if (Code <= 15)
+   {
+    DecompressedCodes.insert(Code);
+    return true;
+   } 
+   else if(Code == 16) {
+    MinOffset = 3;
+    BitsToRead = 2;
+    CopyVal = DecompressedCodes.readAt(DecompressedCodes.LastFreeIndex - 1);
+   }
+   else if(Code == 17) {
+    MinOffset = 3;
+    BitsToRead = 3;
+   }
+   else if(Code == 18) {
+    MinOffset = 11;
+    BitsToRead = 7;
+   } else {
+    console.assert(false,"Unexpected value of the code");
+    return false;
+   };
+
+   let RepeatLength = MinOffset + readBitsLSB(BitReadingContext,BitsToRead);
+   for (let _ = 0;_ < RepeatLength;_++)
+   {
+    DecompressedCodes.insert(CopyVal);
+   };
+   DecodedCodes += RepeatLength;
+  };
+
+
+
+  //distance codes
 
   //bookmark decode here instead
   /*code*/
@@ -376,7 +439,6 @@ const RETURN_VALUES = Object.freeze({
 
   let Len = readBitsLSB(BitReadingContext,16);
   let NLen = readBitsLSB(BitReadingContext,16);
-  console.log(Len);
 
   let IsValid = (Len ^ NLen) == 0xFFFF;
 
@@ -528,8 +590,8 @@ const RETURN_VALUES = Object.freeze({
  {
   let Data = NULL_ARRAY;
   Data = _Data;
- 
  };
+
  return {
   inflateLZ77: inflateLZ77,
   deflateLZ77: deflateLZ77,
