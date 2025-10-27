@@ -339,9 +339,15 @@ function Chunks()
     BufferData[Index] = (readByte(ReadingContext));
    };
    return BufferData;
-  }
-    function getCRCOfBuffer(ByteBuffer){
-   let CRC = BIT32_MAX;
+  };
+  
+  function getCRCOfBuffer(_ReadingContext,_Chunk){
+   let ReadingContext = NULL_READING_CONTEXT;
+   ReadingContext = _ReadingContext;   
+   let Chunk = NULL_BASIC_CHUNK;
+   Chunk = _Chunk;
+
+   let CRC = 0xFFFFFFFF;
    //bookmark unfinished
   }
 

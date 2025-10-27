@@ -16,6 +16,7 @@ function PNG()
   const ENUM_TARGET_TYPES = Object.freeze({
    URL: 0,
    FILE: 1,
+   RAW: 2,
   });
   const BIT_DEPTHS = Object.freeze({
    BIT1: 0b1,
@@ -255,20 +256,26 @@ function PNG()
 
   async function decode(TARGET_IMAGE_RESOURCE,TARGET_IMAGE_RESOURCE_TYPE)
   {
+   let ImageData = new Uint8Array();
    if (TARGET_IMAGE_RESOURCE_TYPE == ENUM_TARGET_TYPES.FILE) {
-      console.assert(false, 
-       "File target type is not handled yet"
-      );
+      throw new Error("Error: The file type is not handled yet");
       return -1;
+   } else if (TARGET_IMAGE_RESOURCE_TYPE == ENUM_TARGET_TYPES.URL)
+   {
+      let ImageURL = TARGET_IMAGE_RESOURCE;
+      if (!isURLValid(ImageURL)) {
+         throw new Error("Error: The URL is invalid");
+         return -1;
+      }
+      ImageData = await requestImageData(ImageURL);
    }
-   let ImageURL = TARGET_IMAGE_RESOURCE;
-   if (!isURLValid(ImageURL)) {
-      console.assert(false,
-       "The URL is invalid"
-      );
-      return -1;
+   else if (TARGET_IMAGE_RESOURCE == ENUM_TARGET_TYPES.RAW)
+   {
+    ImageData = (new TextEncoder().encode(TARGET_IMAGE_RESOURCE));
+   } else {
+    throw new Error("Error: Target image resource type not recognized");
    }
-   let ImageData = await requestImageData(ImageURL);
+
    let ReadingContext = createReadingContext(ImageData);
 
    if (!checkSignature(ReadingContext)) {
@@ -284,8 +291,7 @@ function PNG()
 
    let IsFilterMethodValid = IHDRChunk.FilterMethod >= 0 && IHDRChunk.FilterMethod <= 4;
    if (!IsFilterMethodValid) {
-    console.assert(false,
-      "Unrecognized filter method");
+    throw new Error("Error: Unrecognized filter method");
     return -1;
    };
 
