@@ -8,8 +8,10 @@ function Chunks()
 
   const BYTE_MAX = Math.pow(2,8) - 1; 
   
-  const NULL_UINT8ARRAY = CRC.NULL_UINT8ARRAY;
-  const NULL_VECTOR8 = NULL_VECTOR8;
+  const Vector = STDVector();
+
+  const Vector8 = Vector.Vector8;
+  const NULL_VECTOR8 = Vector.NULL_VECTOR8;
   const NULL_READING_CONTEXT = _createReadingContext();
   const NULL_BASIC_CHUNK = _createBasicChunk();
   const NULL_NCDS_READING_CONTEXT = _createMultiChunkReadingContext();

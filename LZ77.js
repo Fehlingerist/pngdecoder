@@ -1,9 +1,5 @@
 //RFC 1951
 //start since the headers of the deflate blocks
-let codeOutput = {};
-let codes = "";
-let bits = "";
-
 function LZ77()
 {
  function CSTE(Code, ExtraBits=0, Min=0, Max=Min)//create table element
@@ -86,7 +82,9 @@ const RETURN_VALUES = Object.freeze({
  BLOCK_LAST: 1
 });
  
- const NULL_VECTOR8 = new Vector8(0);
+ const Vector = STDVector();
+ const Vector8 = Vector.Vector8;
+ const NULL_VECTOR8 = Vector.NULL_VECTOR8;
 
  const NULL_BASIC_CHUNK = NMChunks._createBasicChunk();
  const NULL_READING_CONTEXT = NMChunks._createReadingContext();
@@ -530,7 +528,7 @@ const RETURN_VALUES = Object.freeze({
   };
   return true;
  };
- 
+
  function inflateLZ77(_ReadingContext)
  {
   let ReadingContext = NULL_READING_CONTEXT;
@@ -588,7 +586,7 @@ const RETURN_VALUES = Object.freeze({
  
  function deflateLZ77(_Data)
  {
-  let Data = NULL_ARRAY;
+  let Data = NULL_VECTOR8;
   Data = _Data;
  };
 
