@@ -20,7 +20,7 @@ class Vector8
     NewArray.set(this.Array);
     this.Array = NewArray;
   }catch(E) {
-    console.assert(false, "Not enough memory / failed to create new array");
+    throw new Error( "Not enough memory / failed to create new array");
     return false;
   }
   return true;
@@ -35,7 +35,7 @@ class Vector8
  {
   if (Index == -1)
   {
-   console.assert(false,"Can't set Index of the array, when the said index is a typeof null");
+   throw new Error ("Can't set Index of the array, when the said index is a typeof null");
    return false;
   };
   if (this.Capacity <= Index)
@@ -55,7 +55,7 @@ class Vector8
     let Success = this.increaseCapacity();
     if (!Success)
     {
-     console.assert(false,"Can't insert element into an array");
+     throw new Error("Can't insert element into an array");
      return false;
     };
    };
@@ -64,7 +64,7 @@ class Vector8
   };
   if (this.LastFreeIndex < Index)
   {
-   console.assert(false,`
+   throw new Error(`
     Can't set values outside of the last free index boundary. \n 
     for that, make use of set function, which is less restricted`);
    return false;
@@ -80,7 +80,7 @@ class Vector8
  {
   if (this.LastFreeIndex <= Index || Index < 0)
   {
-   console.assert(false,
+   throw new Error(
     `Attempted to read an entry from outside of the 
     boundaries of the array.`
    );
@@ -89,3 +89,5 @@ class Vector8
   return this.Array[Index];
  };
 }
+
+const NULL_VECTOR8 = new Vector8();

@@ -3,6 +3,8 @@ function PNG()
   const NMLZ77 = LZ77();
   const NMChunks = Chunks();
   const PNG_SIGNATURE = Object.freeze([137, 80, 78, 71, 13, 10, 26, 10]);
+
+  const NULL_UINT8ARRAY = NMChunks.NULL_UINT8ARRAY;
   
   let readByte = NMChunks.readByte;
   let readNumber = NMChunks.readNumber;
@@ -102,35 +104,30 @@ function PNG()
   {
     if (ColorType == (COLOR_TYPES.COLOR_USED)) {
     if (!(BitDepth == BIT_DEPTHS.BIT8 || BitDepth == BIT_DEPTHS.BIT16)){
-      console.assert(false,"Invalid BitDepth for ColorType specified in standard");
+      throw new Error("Invalid BitDepth for ColorType specified in standard");
       //https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
-      return null;
    }}
    else if(ColorType == (COLOR_TYPES.PALETTE | COLOR_TYPES.COLOR_USED)){
     if (BitDepth == BIT_DEPTHS.BIT8 || BitDepth == BIT_DEPTHS.BIT16){
-          console.assert(false,"Invalid BitDepth for ColorType specified in standard");
+          throw new Error("Invalid BitDepth for ColorType specified in standard");
       //https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
-      return false;
     };
    } else if (ColorType == COLOR_TYPES.ALPHA_CHANNEL) {
     if (!(BitDepth == BIT_DEPTHS.BIT8 || BitDepth == BIT_DEPTHS.BIT16)){
-      console.assert(false,"Invalid BitDepth for ColorType specified in standard");
+      throw new Error("Invalid BitDepth for ColorType specified in standard");
       //https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
-      return false;
     }
    }
    else if (ColorType == (COLOR_TYPES.ALPHA_CHANNEL | COLOR_TYPES.COLOR_USED)){
     if (!(BitDepth == BIT_DEPTHS.BIT8 || BitDepth == BIT_DEPTHS.BIT16)){
-      console.assert(false,"Invalid BitDepth for ColorType specified in standard");
+      throw new Error("Invalid BitDepth for ColorType specified in standard");
       //https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
-      return false;
     }
    }
    else if (ColorType != 0)
    {
-    console.assert(false,"ColorType, which doesn't fit the requirement for the standard specified");
+    throw new Error("ColorType, which doesn't fit the requirement for the standard specified");
     //https://www.libpng.org/pub/png/spec/1.2/PNG-Chunks.html
-    return false;
    }
    else {
     //do nothing
@@ -155,10 +152,7 @@ function PNG()
    IHDRChunk = getChunkByType(ReadingContext,"IHDR");
 
    if (!IHDRChunk) {
-    console.assert(false,
-     "IHDR Chunk doesn't exist, file is corrupted"
-    );
-    return null;
+    throw new Error("IHDR Chunk doesn't exist, file is corrupted");
    };
 
    let IHDRDataReadingContext = createReadingContext(IHDRChunk.Data);
@@ -173,9 +167,7 @@ function PNG()
    InterlaceMethod = readByte(IHDRDataReadingContext);
 
    if (!isColorTypeValidInCombinationWithBitDepth(ColorType,BitDepth)){
-    console.assert(false,
-      "Invalid color type in combination with bit depth, according to the set standard");
-    return null;
+    throw new Error("Invalid color type in combination with bit depth, according to the set standard");
    }
 
    return {
@@ -198,14 +190,12 @@ function PNG()
    PLTEChunk = getChunkByType(ReadingContext,"PLTE");
 
    if (!PLTEChunk) {
-    console.assert(false,"PLTE Chunk doesn't exist within this file");
-    return null;
+    throw new Error("PLTE Chunk doesn't exist within this file");
    };
 
    let IsInvalid = (PLTEChunk.Length % 3) != 0;
    if (IsInvalid) {
-    console.assert(false,"Invalid PLTE Chunk Length");
-    return null;
+    throw new Error("Invalid PLTE Chunk Length");
    };
 
    let ActiveEntires = PLTEChunk.Length / 3;
@@ -238,11 +228,11 @@ function PNG()
    {
     DecompressedData = NMLZ77.inflateLZ77(ReadingContext);
    } else{
-    console.assert(false,"Undefined compression algorithm");  
+    throw new Error("Undefined compression algorithm");  
     return null;
    };
    if (!DecompressedData) {
-    console.assert(false,
+    throw new Error(
       "Something went wrong");
     return null;
    }
@@ -279,7 +269,7 @@ function PNG()
    let ReadingContext = createReadingContext(ImageData);
 
    if (!checkSignature(ReadingContext)) {
-     console.assert(false,
+     throw new Error(
       "The file doesn't have the PNG signature"
      );
      return -1;
@@ -295,13 +285,13 @@ function PNG()
     return -1;
    };
 
-   let Data = new Vector8(0);
+   let Data = NULL;
    //inflating algorithm should then return the result in a single ByteArray
    //bookmark inflate
    Data = decompress(ReadingContext,IHDRChunk.CompressionMethod);
 
    if (!Data) {
-    console.assert(false,"Data couldn't be decompressed successfully");
+    throw new Error("Data couldn't be decompressed successfully");
     return -1;
    };
 

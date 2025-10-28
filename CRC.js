@@ -1,35 +1,46 @@
 function CRC()
 {
-    const BIT32_MAX = 0xFFFFFFFF;
-    const POLYNOMIAL = 0xEDB88320;
-
-    let CRC32Table = new Array(256);
-
-    function makeCRCTable()
+   const BIT32_MAX = 0xFFFFFFFF;
+   const POLYNOMIAL = 0xEDB88320; 
+   let CRC32Table = new Array(256); 
+   function makeCRCTable()
     {
-     let c;
+     let CRC;
      let n, k;
    
      for (n = 0; n < 256; n++) {
-       c = n;
+       CRC = n;
        for (k = 0; k < 8; k++) {
-         if (c & 1)
-           c = 0xedb88320 ^ (c >> 1);
+         if (CRC & 1)
+           CRC = POLYNOMIAL ^ (CRC >> 1);
          else
-           c = c >> 1;
+           CRC = CRC >> 1;
        }
-       crc_table[n] = c;
+       CRC32Table[n] = CRC;
      }
-     crc_table_computed = 1;
-    }
+   }
 
+   function updateCRC(CRCCode, _Buffer)
+   {
+     let Buffer = NULL_UINT8ARRAY;
+     Buffer = _Buffer;
+     let CRC = CRCCode;
+     for (let n = 0; n < Buffer.length; n++) {
+       CRC = CRC32Table[(c ^ Buffer[n]) & 0xff] ^ (c >> 8);
+     }
+     return CRC;
+   }
+   
+   function getCRCOfBuffer(_Buffer)
+   {
+    let Buffer = NULL_UINT8ARRAY;
+    Buffer = _Buffer;
+    return updateCRC(BIT32_MAX, Buffer) ^ BIT32_MAX;
+   }
 
-    function getCRCOfBuffer()
-    {
+   makeCRCTable();
 
-    };
-
-    return {
-        
-    };
+   return {
+    getCRCOfBuffer: getCRCOfBuffer
+   };
 };

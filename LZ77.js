@@ -86,19 +86,19 @@ const RETURN_VALUES = Object.freeze({
  BLOCK_LAST: 1
 });
  
- let NULL_VECTOR8 = new Vector8(0);
- 
- let NULL_BASIC_CHUNK = NMChunks._createBasicChunk();
- let NULL_READING_CONTEXT = NMChunks._createReadingContext();
- let NULL_NCDS_READING_CONTEXT = NMChunks._createMultiChunkReadingContext();
- 
- let NULL_BIT_READING_CONTEXT = _createBitReadingContext();
- let NULL_DELFATE_BLOCK = _createDeflateBlockContext();
- let NULL_DECOMPRESSION_CONTEXT = _createDecompressionContext();
- 
- let NCDSReadByte = NMChunks.NCDSReadByte;
- let NCDSReadCurrentByte = NMChunks.NCDSReadCurrentByte;
- let NCDSReadNumber = NMChunks.NCDSReadNumber;
+ const NULL_VECTOR8 = new Vector8(0);
+
+ const NULL_BASIC_CHUNK = NMChunks._createBasicChunk();
+ const NULL_READING_CONTEXT = NMChunks._createReadingContext();
+ const NULL_NCDS_READING_CONTEXT = NMChunks._createMultiChunkReadingContext();
+
+ const NULL_BIT_READING_CONTEXT = _createBitReadingContext();
+ const NULL_DELFATE_BLOCK = _createDeflateBlockContext();
+ const NULL_DECOMPRESSION_CONTEXT = _createDecompressionContext();
+
+ const NCDSReadByte = NMChunks.NCDSReadByte;
+ const NCDSReadCurrentByte = NMChunks.NCDSReadCurrentByte;
+ const NCDSReadNumber = NMChunks.NCDSReadNumber;
  
  let createMultiChunkReadingContext = NMChunks.createMultiChunkReadingContext;
 
@@ -185,10 +185,10 @@ const RETURN_VALUES = Object.freeze({
  {
   if (BitIndex < 0 || BitIndex >= 8)
   {
-   console.assert(false,"incorrect bit index");
+   throw new Error("incorrect bit index");
    return null; 
   } else if(BitValue != 0 && BitValue != 1 && BitValue != BIT_TOGGLE){
-   console.assert(false,"incorrect byte index");   
+   throw new Error("incorrect byte index");   
    return null;
   };
   let Pos = 1 << BitIndex;//better to precompute or sth
@@ -319,7 +319,7 @@ const RETURN_VALUES = Object.freeze({
     let Success = DecompressionContext.DataOutput.insert(Lit);
     if (!Success)
     {
-     console.assert(false,"Failed to insert a byte");
+     throw new Error("Failed to insert a byte");
      break;
     };
     continue; 
@@ -331,14 +331,14 @@ const RETURN_VALUES = Object.freeze({
    }
    else if (Lit > 285)
    {
-    console.assert(false,"Lit shouldn't be greater than 285, because there's no such cases considered");
+    throw new Error("Lit shouldn't be greater than 285, because there's no such cases considered");
     break;
    };
    let LiteralLengthData = LengthCodesTable[Lit - 257];
    let LengthToCopy = LiteralLengthData.Min + readBitsLSB(BitReadingContext,LiteralLengthData.ExtraBits);
    let DistanceCode = readBitsLSB(BitReadingContext,5) ;
    if (DistanceCode >= 30) {
-    console.assert(false,"unknown field");
+    throw new Error("unknown field");
     break;
    };
    let DistanceToMoveBackData = DistancesCodesTable[DistanceCode];
@@ -410,7 +410,7 @@ const RETURN_VALUES = Object.freeze({
     MinOffset = 11;
     BitsToRead = 7;
    } else {
-    console.assert(false,"Unexpected value of the code");
+    throw new Error("Unexpected value of the code");
     return false;
    };
 
@@ -460,7 +460,7 @@ const RETURN_VALUES = Object.freeze({
    //non-compressible blocks are limited to 65,535 bytes.
    if (Byte === null || Byte === undefined)
    {
-    console.assert(false,
+    throw new Error(
       "The read byte doesn't exist"
     );
     return false;
@@ -490,7 +490,7 @@ const RETURN_VALUES = Object.freeze({
   else if(BlockType == DEFLATE_BLOCK_TYPES.DYNAMIC_HUFFMAN_CODES){
    Success = decodeBlockDynamicHuffman(DecompressionContext);
   } else {
-   console.assert(false,
+   throw new Error(
     "Incorrect block type"
    );
    return RETURN_VALUES.ERROR;
@@ -520,7 +520,7 @@ const RETURN_VALUES = Object.freeze({
     continue;
    } else if (ResponseCode == RETURN_VALUES.ERROR)
    {
-    console.assert(false,
+    throw new Error(
       "Failed to decode data block"
     );
     return false; 
@@ -557,7 +557,7 @@ const RETURN_VALUES = Object.freeze({
   let IsAMultipleOf31 = (CMF * 256 + FLG) % 31 == 0;
  
   if (!IsAMultipleOf31) {
-     console.assert(false,
+     throw new Error(
          "ZLIB data invalid, CMF*256 + FLG bytes must be a multiple of 31"
      );
      return null;
@@ -577,7 +577,7 @@ const RETURN_VALUES = Object.freeze({
  
   if (DecompressionContext.ADLER32ChS != RealADLER32Chs)
   {
-   console.assert(false,
+   throw new Error(
     "ADLER32 Checksum is invalid / data is invalid"
    );
    return null;

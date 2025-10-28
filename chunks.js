@@ -1,13 +1,15 @@
 function Chunks()
 {
+  const CRCEnv = CRC();
+
   const ENUM_LOGICAL_BIT_OFFSETS = Object.freeze({
       LOWER_CASE_BIT: 32,
   });
 
   const BYTE_MAX = Math.pow(2,8) - 1; 
-  const BIT32_MAX = Math.pow(2,32) - 1;
-
-  const NULL_VECTOR8 = new Vector8(0);
+  
+  const NULL_UINT8ARRAY = CRC.NULL_UINT8ARRAY;
+  const NULL_VECTOR8 = NULL_VECTOR8;
   const NULL_READING_CONTEXT = _createReadingContext();
   const NULL_BASIC_CHUNK = _createBasicChunk();
   const NULL_NCDS_READING_CONTEXT = _createMultiChunkReadingContext();
@@ -73,7 +75,7 @@ function Chunks()
     let Chunks = getChunksByType(ReadingContext,ChunkType);
     if (!Chunks) 
     {
-     console.assert("There's no such a chunk type within the reading context");
+     throw new Error("There's no such a chunk type within the reading context");
      return NULL_NCDS_READING_CONTEXT;
     };
 
@@ -111,7 +113,7 @@ function Chunks()
 
     if (MultiChunkReaderContext.Length == MultiChunkReaderContext.CurrentGlobalChunkIndex)
     {
-     console.assert("There is no more memory to read within the context.");
+     throw new Error("There is no more memory to read within the context.");
      return null;
     };
 
@@ -127,18 +129,13 @@ function Chunks()
      );
     } else if (InnerIndex >= LastByte)
     {
-     console.assert(false,
-      "Bug occured"
-     );
+     throw new Error("Bug occured InnerIndex >= LastByte");
     };
     let Byte = readByte(MultiChunkReaderContext.ReadingContext);
 
     if (Byte === null || Byte === undefined)
     {
-     console.assert(
-      false,
-      "Trying to read a byte, which doesn't exist"
-     );
+     throw new Error("Trying to read a byte, which doesn't exist");
      return null;
     };
 
@@ -198,21 +195,18 @@ function Chunks()
 
    if (!ReadingContext)
    {
-    console.assert(false,"Reading context doesn't exist");
-    return null;
+    throw new Error("Reading context doesn't exist");
    }
    if (!BasicChunk)
    {
-    console.assert(false,"Chunk doesn't exist");
-    return null;
+    throw new Error("Chunk doesn't exist");
    }
 
    ReadingContext.Start = BasicChunk.OffsetInData;
    ReadingContext.LastByte = BasicChunk.OffsetInData + BasicChunk.Length;
 
    ReadingContext.CurrentReadByte = 0;
-  };
-
+  };  
   function createReadingContext(Data)
   {
    if (!Data) {
@@ -222,13 +216,11 @@ function Chunks()
    ReadingContext.Source = Data;
    ReadingContext.Length = Data.length;
    return ReadingContext;
-  };
-
+  };  
   function createBasicChunk()
   {
     return _createBasicChunk();
-  };
-
+  };  
   function getChunkByType(_ReadingContext,ChunkType){
    let ReadingContext = NULL_READING_CONTEXT ;
    if (_ReadingContext) {
@@ -236,12 +228,10 @@ function Chunks()
    };
    let Chunks = getChunksByType(ReadingContext,ChunkType);
    if (!Chunks) {
-      console.assert(false,
-      "Can't retrieve chunk data, because the provided chunk type doesn't exist");
+      throw new Error("Can't retrieve chunk data, because the provided chunk type doesn't exist");
    };
    return Chunks[0];
-  };
-
+  };  
   function getChunksByType(_ReadingContext,ChunkType)
   {
    let ReadingContext = NULL_READING_CONTEXT ;
@@ -250,28 +240,23 @@ function Chunks()
    };
    let Chunks = ReadingContext.Chunks[ChunkType];
    if (!Chunks) {
-      console.assert(false,
-          "Provided chunk type, doesn't have any chunks referenced to it"
-      );
+      console.warn("Provided chunk type, doesn't have any chunks referenced to it");
       return null;
    };
    return Chunks;
-  };
-
-    function readByte(_ReadingContext)
+  };  
+  function readByte(_ReadingContext)
   {
    let ReadingContext = NULL_READING_CONTEXT;
    ReadingContext = _ReadingContext;
    return ReadingContext.Source[ReadingContext.Start + ReadingContext.CurrentReadByte++];
-  };
-
+  };  
   function assignChunkBoundaries(_BasicChunk,Offset)
   {
    let BasicChunk = NULL_BASIC_CHUNK;
    BasicChunk = _BasicChunk;
    BasicChunk.OffsetInData = Offset;
-  };
-
+  };  
   function readCharString(_ReadingContext,StringLength)
   {
    let ReadingContext = NULL_READING_CONTEXT;
@@ -281,54 +266,44 @@ function Chunks()
    {
     let Byte = readByte(_ReadingContext);
     let Char = String.fromCharCode(Byte);
-    CharString+=Char;
+    CharString += Char;
    };
    return CharString;
-  };
-
-
+  };  
   function readNumber(_ReadingContext,SizeOf=4,IsSigned=false) {
    let ReadingContext = NULL_READING_CONTEXT ;
    ReadingContext = _ReadingContext;
    let Number = 0;
-   let FirstByte = readByte(ReadingContext);
-
+   let FirstByte = readByte(ReadingContext);  
    let IsNegative = (FirstByte >> 7) == 1 && IsSigned;
-   let NumberBits = SizeOf * 8;
-
+   let NumberBits = SizeOf * 8; 
    if (IsNegative) {
     NumberBits--;
     FirstByte = FirstByte << 1;
     FirstByte = FirstByte & BYTE_MAX;
     FirstByte = FirstByte >> 1;
-   };
-
-   Number += FirstByte * (2 ** NumberBits);
-
+   }; 
+   Number += FirstByte * (2 ** NumberBits); 
    for (let ByteIndex = 1;ByteIndex < SizeOf;ByteIndex++)
    {
     let Byte = readByte(ReadingContext);
     Number += Byte * (2 ** (NumberBits - (ByteIndex+1) * 8));
-   };
-
+   }; 
    if (IsNegative) {
       Number = -Number;
-   };
-
+   }; 
    return Number;
-  };
-
+  };  
   function readCurrentByte(_ReadingContext)
   {
    let ReadingContext = NULL_READING_CONTEXT;
    ReadingContext = _ReadingContext;
-  
-   return ReadingContext.Source[ReadingContext.Start + ReadingContext.CurrentReadByte];
-  };
 
+   return ReadingContext.Source[ReadingContext.Start + ReadingContext.CurrentReadByte];
+  };  
   function readBufferData(_ReadingContext,BufferLength)
   {
-   warn("Function is no longer needed - stop the use of it");
+   console.warn("Function is no longer needed - stop the use of it");
    let ReadingContext = NULL_READING_CONTEXT ;
    if (_ReadingContext) {
      ReadingContext = _ReadingContext;
@@ -339,54 +314,32 @@ function Chunks()
     BufferData[Index] = (readByte(ReadingContext));
    };
    return BufferData;
-  };
-  
-  function getCRCOfBuffer(_ReadingContext,_Chunk){
-   let ReadingContext = NULL_READING_CONTEXT;
-   ReadingContext = _ReadingContext;   
-   let Chunk = NULL_BASIC_CHUNK;
-   Chunk = _Chunk;
-
-   let CRC = 0xFFFFFFFF;
-   //bookmark unfinished
-  }
-
+  };  
   function readChunk(_ReadingContext)
   {
    let ReadingContext = NULL_READING_CONTEXT ;
-   ReadingContext = _ReadingContext;   
-
-   let Chunk = createBasicChunk();
-
+   ReadingContext = _ReadingContext;    
+   let Chunk = createBasicChunk();  
    let Length = readNumber(ReadingContext);
-   let ChunkType = readCharString(ReadingContext,4);
-
+   let ChunkType = readCharString(ReadingContext,4);  
    let Offset = ReadingContext.CurrentReadByte;
-   assignChunkBoundaries(Chunk,Offset);
-
+   assignChunkBoundaries(Chunk,Offset); 
    Chunk.ChunkType = ChunkType;
-   Chunk.Data = ReadingContext.Source;
-
+   Chunk.Data = ReadingContext.Source;  
    Chunk.IsCriticial = !isLowerCase(ChunkType[0]);
    Chunk.IsPublic = !isLowerCase(ChunkType[1]); 
    Chunk.ReservedBit = !isLowerCase(ChunkType[2]);
-   Chunk.SafeToCopy = isLowerCase(ChunkType[3]);
-
-   Chunk.Length = Length;
-
-   let CalcualtedCRC = getCRCOfBuffer(ReadingContext,Chunk);//bookmark to be calculated
+   Chunk.SafeToCopy = isLowerCase(ChunkType[3]);  
+   Chunk.Length = Length; 
+   let CalcualtedCRC = CRCEnv.getCRCOfBuffer(new Uint8Array(ReadingContext.Source,Chunk.OffsetInData,Chunk.Length));//bookmark to be calculated
    chunkHasBeenRead(ReadingContext,Chunk);//technically no and it's CRC's job
-   let CRC = readNumber(ReadingContext);
-   CalcualtedCRC = CRC;//bookmark should be removed after fixes
-
+   let CRC = readNumber(ReadingContext);  
    if (CRC != CalcualtedCRC) {
-      console.assert(false,"Invalid Chunk Data");//later should be changed to warn
+      console.warn("Invalid Chunk Data");
       return null;
-   };
-
+   }; 
    return Chunk;
-  };
-
+  };  
   function readChunks(_ReadingContext){
    let ReadingContext = NULL_READING_CONTEXT;
    ReadingContext = _ReadingContext;   
@@ -394,16 +347,14 @@ function Chunks()
    {
     let ChunkData = readChunk(ReadingContext);
     if (!ChunkData) {
-     console.assert("Error occured, while reading chunks");
+     throw new Error("Error occured, while reading chunks");
      break;
     };
     ReadingContext.Chunks[ChunkData.ChunkType] = ReadingContext.Chunks[ChunkData.ChunkType] || [];
     ReadingContext.Chunks[ChunkData.ChunkType].push(ChunkData);
    };
   };
-
-
- return {
+  return {
    _createMultiChunkReadingContext: _createMultiChunkReadingContext,
    _createReadingContext: _createReadingContext,
    _createBasicChunk: _createBasicChunk,
@@ -431,5 +382,7 @@ function Chunks()
    readChunks: readChunks,
 
    setContextOfReadingContextFromChunk: setContextOfReadingContextFromChunk,
+
+   NULL_UINT8ARRAY: NULL_UINT8ARRAY
  };
 };
